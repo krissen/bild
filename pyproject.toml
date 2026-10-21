@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bild"
+version = "0.1.0"
+description = "One command with verbs for image tasks: face blurring, contact sheets, levelling, metadata stripping"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "numpy",
+    "pillow",
+    "opencv-python-headless",
+    "insightface==1.0.1",
+    "onnxruntime",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+raw = ["rawpy"]
+heic = ["pillow-heif"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+bild = "bild.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = ["slow: runs the face detection model"]
+addopts = "-m 'not slow'"
+
+[tool.ruff]
+line-length = 100
