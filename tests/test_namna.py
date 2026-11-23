@@ -1,4 +1,7 @@
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from bild import namna
 from bild.cli import main
@@ -175,6 +178,29 @@ def test_namna_dry_run_does_not_rename(tmp_path, capsys):
     plan = namna.build_move_plan([("260101_120000", "00", src)])
     namna.execute_renames(plan, dry_run=True)
     assert "(dry)" in capsys.readouterr().out
+    assert src.exists()
+
+
+def test_exif_dates_reports_exiftool_failure(monkeypatch):
+    monkeypatch.setattr(
+        namna.subprocess,
+        "run",
+        lambda command, **kwargs: SimpleNamespace(returncode=1, stdout="", stderr="corrupt NEF"),
+    )
+    with pytest.raises(RuntimeError, match="corrupt NEF"):
+        namna.exif_dates([Path("/tmp/DSC_0001.NEF")])
+
+
+def test_cli_namna_propagates_exif_failure(tmp_path, monkeypatch, capsys):
+    src = tmp_path / "DSC_0001.NEF"
+    src.write_bytes(b"raw")
+    monkeypatch.setattr(
+        namna.subprocess,
+        "run",
+        lambda command, **kwargs: SimpleNamespace(returncode=1, stdout="", stderr="corrupt NEF"),
+    )
+    assert main(["namna", str(src)]) == 1
+    assert "corrupt NEF" in capsys.readouterr().err
     assert src.exists()
 
 

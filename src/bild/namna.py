@@ -45,6 +45,9 @@ def exif_dates(files: list[Path]) -> dict[Path, tuple[str, str]]:
         *[str(f) for f in files],
     ]
     result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exiftool exited with status {result.returncode}"
+        raise RuntimeError(detail[:300])
     dates: dict[Path, tuple[str, str]] = {}
     for line in result.stdout.strip().splitlines():
         parts = line.split("|", 2)
@@ -197,6 +200,9 @@ def run_namna(files: list[Path], *, dry_run: bool, include_named: bool = False) 
         return 1
     except subprocess.TimeoutExpired:
         print("FEL: exiftool timeout", file=sys.stderr)
+        return 1
+    except RuntimeError as error:
+        print(f"FEL: exiftool: {error}", file=sys.stderr)
         return 1
 
     entries = []
