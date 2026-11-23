@@ -20,6 +20,35 @@ STANDARD_EXTENSIONS = (".jpg", ".jpeg", ".tiff", ".tif", ".png")
 SUPPORTED_EXTENSIONS = RAW_EXTENSIONS + STANDARD_EXTENSIONS
 
 TIMESTAMP_PATTERN = re.compile(r"^(\d{6}_\d{6})")
+DATE_PATTERN = re.compile(r"^(\d{6})")
+
+
+def parse_date_arg(value: str) -> str:
+    """Accept YYMMDD, YYYYMMDD, YYYY-MM-DD or YY-MM-DD; return YYMMDD."""
+    value = value.strip()
+    if re.fullmatch(r"\d{6}", value):
+        return value
+    if re.fullmatch(r"\d{8}", value):
+        return value[2:]
+    for fmt in ("%Y-%m-%d", "%y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt).strftime("%y%m%d")
+        except ValueError:
+            continue
+    raise ValueError(f"unknown date format: {value}")
+
+
+def extract_date(filename: str) -> str | None:
+    """Return the leading YYMMDD of a filename, if it parses as a date."""
+    match = DATE_PATTERN.match(filename)
+    if not match:
+        return None
+    token = match.group(1)
+    try:
+        datetime.strptime(token, "%y%m%d")
+    except ValueError:
+        return None
+    return token
 
 
 def extract_timestamp(filename: str) -> tuple[str, datetime] | None:

@@ -58,35 +58,64 @@ def cmd_blur(args: argparse.Namespace) -> int:
 
 
 def cmd_flytta(args: argparse.Namespace) -> int:
-    from .flytta import compute_spegla_moves, execute_spegla_moves
+    from .flytta import (
+        compute_datum_moves,
+        compute_spegla_moves,
+        execute_datum_moves,
+        execute_spegla_moves,
+    )
+    from .moves import parse_date_arg
 
-    if not args.spegla:
-        raise SystemExit("no mode given: use --spegla (auto-detect arrives in phase 2)")
-    source_root = args.kallrot.expanduser().resolve()
+    mode = "spegla" if args.spegla else "datum" if args.datum else None
+    if mode is None:
+        raise SystemExit(
+            "no mode given: use --spegla or --datum (auto-detect arrives in phase 2)"
+        )
     target_root = args.target.expanduser().resolve()
-    for label, root in (("source root", source_root), ("target root", target_root)):
-        if not root.is_dir():
-            raise SystemExit(f"{label} does not exist or is not a directory: {root}")
-    if (
-        source_root == target_root
-        or source_root in target_root.parents
-        or target_root in source_root.parents
-    ):
-        raise SystemExit("source and target roots must not overlap")
+    if not target_root.is_dir():
+        raise SystemExit(f"target root does not exist or is not a directory: {target_root}")
 
-    safe, unresolved = compute_spegla_moves(source_root, target_root)
-    print(f"Safe: {len(safe)}, unresolved: {len(unresolved)}.")
-    if unresolved:
-        print("Unresolved files:", file=sys.stderr)
-        for path in unresolved:
-            print(f"  {path.name}", file=sys.stderr)
+    if mode == "spegla":
+        source_root = args.kallrot.expanduser().resolve()
+        if not source_root.is_dir():
+            raise SystemExit(f"source root does not exist or is not a directory: {source_root}")
+        if (
+            source_root == target_root
+            or source_root in target_root.parents
+            or target_root in source_root.parents
+        ):
+            raise SystemExit("source and target roots must not overlap")
+        safe, unresolved = compute_spegla_moves(source_root, target_root)
+        print(f"Safe: {len(safe)}, unresolved: {len(unresolved)}.")
+        if unresolved:
+            print("Unresolved files:", file=sys.stderr)
+            for path in unresolved:
+                print(f"  {path.name}", file=sys.stderr)
+        moved, failed = execute_spegla_moves(
+            safe, dry_run=args.dry_run, verbose=args.verbose or args.dry_run
+        )
+        if not args.dry_run:
+            print(f"Moved {moved} images.")
+        return 1 if unresolved or failed else 0
 
-    moved, failed = execute_spegla_moves(
-        safe, dry_run=args.dry_run, verbose=args.verbose or args.dry_run
+    try:
+        before = parse_date_arg(args.before) if args.before else None
+        after = parse_date_arg(args.after) if args.after else None
+        from_date = parse_date_arg(args.from_date) if args.from_date else None
+        to_date = parse_date_arg(args.to_date) if args.to_date else None
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    groups = compute_datum_moves(
+        target_root, before=before, after=after, from_date=from_date, to_date=to_date
+    )
+    total = sum(len(pairs) for pairs in groups.values())
+    print(f"Safe: {total}, date groups: {len(groups)}.")
+    moved, failed = execute_datum_moves(
+        groups, target_root, dry_run=args.dry_run, verbose=args.verbose or args.dry_run
     )
     if not args.dry_run:
         print(f"Moved {moved} images.")
-    return 1 if unresolved or failed else 0
+    return 1 if failed else 0
 
 
 def cmd_contact(args: argparse.Namespace) -> int:
@@ -216,20 +245,28 @@ def build_parser() -> argparse.ArgumentParser:
     f = sub.add_parser(
         "flytta",
         help="move images into date folders or mirror the source folder structure",
-        description="Move images. --spegla mirrors the relative folders of the source "
-        "images (default source root: ~/Pictures/nerladdat). --datum and the "
-        "auto-detecting default arrive in phase 2; see docs/PLAN.md.",
+        description="Move images. --datum groups files into YYMMDD folders; --spegla "
+        "mirrors the relative folders of the source images (default source root: "
+        "~/Pictures/nerladdat). A mode is required for now; auto-detection arrives "
+        "in phase 2; see docs/PLAN.md.",
     )
     f.add_argument("target", nargs="?", type=Path, default=Path("."), metavar="MÅLMAPP")
     f.add_argument("-n", "--dry-run", action="store_true", help="show what would be done")
     f.add_argument("-v", "--verbose", action="store_true", help="show each move")
-    f.add_argument("--spegla", action="store_true", help="mirror the source folder structure")
+    mode = f.add_mutually_exclusive_group()
+    mode.add_argument("--datum", action="store_true", help="group files into YYMMDD folders")
+    mode.add_argument("--spegla", action="store_true", help="mirror the source folder structure")
     f.add_argument(
         "--kallrot",
         type=Path,
         default=DEFAULT_SOURCE_ROOT,
-        help=f"source tree (default: {DEFAULT_SOURCE_ROOT})",
+        help=f"source tree for --spegla (default: {DEFAULT_SOURCE_ROOT})",
     )
+    dates = f.add_argument_group("date filters for --datum")
+    dates.add_argument("--fran", "--from", dest="from_date", metavar="DATUM")
+    dates.add_argument("--till", "--to", dest="to_date", metavar="DATUM")
+    dates.add_argument("--fore", "--before", dest="before", metavar="DATUM")
+    dates.add_argument("--efter", "--after", dest="after", metavar="DATUM")
     f.set_defaults(func=cmd_flytta)
     return p
 

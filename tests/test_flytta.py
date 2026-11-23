@@ -72,3 +72,47 @@ def test_flytta_requires_a_mode(tmp_path):
     _source, target, _photo = make_tree(tmp_path)
     with pytest.raises(SystemExit, match="no mode given"):
         main(["flytta", str(target)])
+
+
+def make_datum_tree(tmp_path):
+    root = tmp_path / "raws"
+    root.mkdir()
+    for name in ("260101_090000.NEF", "260101_100000.NEF", "260102_090000.NEF"):
+        (root / name).write_bytes(b"raw")
+    (root / "260101_090000.xmp").write_text("xmp")
+    (root / "DSC_0001.NEF").write_bytes(b"raw")
+    return root
+
+
+def test_compute_datum_moves_groups_and_filters(tmp_path):
+    root = make_datum_tree(tmp_path)
+    from bild.flytta import compute_datum_moves
+
+    groups = compute_datum_moves(root)
+    assert [len(v) for v in groups.values()] == [2, 1]
+    assert groups["260101"][0][1][0].name == "260101_090000.xmp"
+
+    filtered = compute_datum_moves(root, from_date="260102")
+    assert list(filtered) == ["260102"]
+
+
+def test_flytta_datum_moves_into_date_folders(tmp_path):
+    root = make_datum_tree(tmp_path)
+    assert main(["flytta", "--datum", str(root)]) == 0
+    assert (root / "260101" / "260101_090000.NEF").exists()
+    assert (root / "260101" / "260101_090000.xmp").exists()
+    assert (root / "260102" / "260102_090000.NEF").exists()
+    assert (root / "DSC_0001.NEF").exists()  # no date prefix: untouched
+
+
+def test_flytta_datum_dry_run_does_not_move(tmp_path):
+    root = make_datum_tree(tmp_path)
+    assert main(["flytta", "-n", "--datum", str(root)]) == 0
+    assert (root / "260101_090000.NEF").exists()
+    assert not (root / "260101").exists()
+
+
+def test_flytta_rejects_invalid_date(tmp_path):
+    root = make_datum_tree(tmp_path)
+    with pytest.raises(SystemExit, match="unknown date format"):
+        main(["flytta", "--datum", "--fore", "not-a-date", str(root)])

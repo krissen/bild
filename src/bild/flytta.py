@@ -11,6 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .moves import (
+    extract_date,
     extract_timestamp,
     find_sidecar_files,
     iter_supported_images,
@@ -58,6 +59,69 @@ def compute_spegla_moves(
             continue
         safe.append((path, target_root / folder / path.name))
     return safe, unresolved
+
+
+def compute_datum_moves(
+    root: Path,
+    *,
+    before: str | None = None,
+    after: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+) -> dict[str, list[tuple[Path, list[Path]]]]:
+    """Group root images by their leading YYMMDD, carrying sidecars along."""
+    groups: dict[str, list[tuple[Path, list[Path]]]] = defaultdict(list)
+    for path in iter_supported_images(root, recursive=False):
+        date = extract_date(path.name)
+        if not date:
+            continue
+        if before and date >= before:
+            continue
+        if after and date <= after:
+            continue
+        if from_date and date < from_date:
+            continue
+        if to_date and date > to_date:
+            continue
+        groups[date].append((path, find_sidecar_files(path)))
+    return dict(groups)
+
+
+def execute_datum_moves(
+    groups: dict[str, list[tuple[Path, list[Path]]]],
+    root: Path,
+    *,
+    dry_run: bool,
+    verbose: bool,
+) -> tuple[int, int]:
+    """Move each date group into its YYMMDD subdirectory."""
+    moved = failed = 0
+    for date, pairs in sorted(groups.items()):
+        target_dir = root / date
+        for main, sidecars in pairs:
+            target = target_dir / main.name
+            sidecar_pairs = [(sc, target_dir / sc.name) for sc in sidecars]
+            if dry_run:
+                error = preflight_destinations([target, *(dst for _src, dst in sidecar_pairs)])
+                if error:
+                    failed += 1
+                    print(f"SKIP: {main.name}: {error}")
+                    continue
+                print(f"(dry) {main.name} -> {date}/")
+                for sidecar, _dst in sidecar_pairs:
+                    print(f"(dry) {sidecar.name} -> {date}/")
+                continue
+            try:
+                target_dir.mkdir(parents=True, exist_ok=True)
+                move_unit(main, target, sidecar_pairs)
+            except OSError as error:
+                failed += 1
+                print(f"FEL: {main.name}: {error}")
+                continue
+            moved += 1
+            if verbose:
+                print(f"{main.name} -> {date}/")
+    return moved, failed
 
 
 def execute_spegla_moves(
