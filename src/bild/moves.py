@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import uuid
+from collections import defaultdict, deque
 from datetime import datetime
 from glob import escape as glob_escape
 from pathlib import Path
@@ -105,24 +106,42 @@ def order_moves(moves: list[Move]) -> list[Move]:
     correctly too. A cycle cannot be resolved without a temporary name and is
     rejected before any filesystem change.
     """
-    pending = {source.resolve(): (source, target, sidecars)
-               for source, target, sidecars in moves}
+    # Build the source index once, then use a dependency counter so ordering a
+    # plan of N moves is O(N) instead of re-resolving every remaining source N
+    # times. Sources include sidecars, which vacate with their main file.
+    source_index: dict[Path, int] = {}
+    for index, (source, _target, sidecars) in enumerate(moves):
+        source_index[source.resolve()] = index
+        for sc_src, _dst in sidecars:
+            source_index[sc_src.resolve()] = index
+
+    blockers: dict[int, set[int]] = defaultdict(set)
+    dependents: dict[int, set[int]] = defaultdict(set)
+    for index, (source, target, sidecars) in enumerate(moves):
+        destinations = [target, *(dst for _src, dst in sidecars)]
+        for destination in destinations:
+            blocker = source_index.get(destination.resolve())
+            if blocker is not None and blocker != index:
+                blockers[index].add(blocker)
+                dependents[blocker].add(index)
+
+    ready = deque(index for index in range(len(moves)) if not blockers[index])
     ordered: list[Move] = []
-    while pending:
-        all_sources: set[Path] = set()
-        for source, _target, sidecars in pending.values():
-            all_sources.add(source.resolve())
-            all_sources.update(sc_src.resolve() for sc_src, _dst in sidecars)
-        for key, move in list(pending.items()):
-            _source, target, sidecars = move
-            destinations = [target, *(dst for _src, dst in sidecars)]
-            if all(destination.resolve() not in all_sources for destination in destinations):
-                ordered.append(move)
-                del pending[key]
-                break
-        else:
-            names = ", ".join(source.name for source, _target, _scs in pending.values())
-            raise ValueError(f"cirkulära flyttar: {names}")
+    ordered_indices: set[int] = set()
+    while ready:
+        index = ready.popleft()
+        ordered.append(moves[index])
+        ordered_indices.add(index)
+        for dependent in dependents.get(index, ()):
+            blockers[dependent].discard(index)
+            if not blockers[dependent]:
+                ready.append(dependent)
+
+    if len(ordered) != len(moves):
+        names = ", ".join(
+            moves[index][0].name for index in range(len(moves)) if index not in ordered_indices
+        )
+        raise ValueError(f"cirkulära flyttar: {names}")
     return ordered
 
 

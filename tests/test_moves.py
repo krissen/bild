@@ -6,6 +6,7 @@ from bild.moves import (
     extract_timestamp,
     find_sidecar_files,
     move_unit,
+    order_moves,
     preflight_destinations,
 )
 
@@ -15,6 +16,14 @@ def test_extract_timestamp():
     assert extract_timestamp("260101_120000.jpg")[0] == "260101_120000"
     assert extract_timestamp("DSC_1234.NEF") is None
     assert extract_timestamp("260199_999999.jpg") is None
+
+
+def test_order_moves_handles_a_chain_of_three(tmp_path):
+    paths = [tmp_path / f"a{index}.jpg" for index in range(3)]
+    moves = [(paths[0], paths[1], []), (paths[1], paths[2], []), (paths[2], tmp_path / "z.jpg", [])]
+
+    ordered = order_moves(moves)
+    assert [source.name for source, _target, _scs in ordered] == ["a2.jpg", "a1.jpg", "a0.jpg"]
 
 
 def test_find_sidecar_files_matches_stem_literally(tmp_path):
