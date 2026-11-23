@@ -77,6 +77,22 @@ def run_farg(
 
     outdir = Path("recolored")
     if not overwrite:
+        planned: dict[str, Path] = {}
+        for path in files:
+            if path.suffix.lower() != ".png":
+                continue
+            target = outdir / path.name
+            if target.resolve() == path.resolve():
+                print(
+                    f"FEL: {path} ligger redan i {outdir}; använd --overwrite",
+                    file=sys.stderr,
+                )
+                return 2
+            key = str(target).casefold()
+            if key in planned:
+                print(f"FEL: två indata skriver till samma fil: {target.name}", file=sys.stderr)
+                return 2
+            planned[key] = path
         outdir.mkdir(parents=True, exist_ok=True)
     done = 0
     for path in files:

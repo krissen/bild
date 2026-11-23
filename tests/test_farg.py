@@ -45,6 +45,27 @@ def test_cli_farg_find_mean(tmp_path, capsys, monkeypatch):
     assert not (tmp_path / "recolored").exists()
 
 
+def test_cli_farg_rejects_input_already_in_output_dir(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    outdir = tmp_path / "recolored"
+    outdir.mkdir()
+    src = outdir / "icon.png"
+    write_png(src, [[[200, 200, 200, 255]]])
+    assert main(["farg", "-c", "1,2,3", str(src)]) == 2
+    assert "redan i" in capsys.readouterr().err
+    assert tuple(np.array(Image.open(src))[0, 0, :3]) == (200, 200, 200)
+
+
+def test_cli_farg_rejects_duplicate_output_names(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    first, second = tmp_path / "a" / "icon.png", tmp_path / "b" / "icon.png"
+    for path in (first, second):
+        path.parent.mkdir()
+        write_png(path, [[[200, 200, 200, 255]]])
+    assert main(["farg", "-c", "1,2,3", str(first), str(second)]) == 2
+    assert "samma fil" in capsys.readouterr().err
+
+
 def test_cli_farg_writes_to_recolored(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "icon.png"
