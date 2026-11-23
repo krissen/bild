@@ -43,6 +43,35 @@ def _rgb(value: str) -> tuple[int, int, int]:
     return colour
 
 
+def cmd_upscale(args: argparse.Namespace) -> int:
+    from .upscale import run_upscale
+
+    passthrough: list[str] = []
+    if args.model:
+        passthrough += ["-m", args.model]
+    if args.output:
+        passthrough += ["-o", str(args.output)]
+    if args.overwrite:
+        passthrough.append("-O")
+    if args.tile:
+        passthrough += ["--tile", str(args.tile)]
+    if args.tile_pad != 10:
+        passthrough += ["--tile_pad", str(args.tile_pad)]
+    if args.pre_pad:
+        passthrough += ["--pre_pad", str(args.pre_pad)]
+    if args.half:
+        passthrough.append("--half")
+    if args.outscale is not None:
+        passthrough += ["--outscale", str(args.outscale)]
+    if args.test:
+        passthrough.append("--test")
+    if args.models:
+        passthrough.append("--models")
+    if args.input:
+        passthrough.append(str(args.input))
+    return run_upscale(passthrough)
+
+
 def cmd_tider(args: argparse.Namespace) -> int:
     from .tider import run_tider
 
@@ -406,6 +435,26 @@ def build_parser() -> argparse.ArgumentParser:
     ti.add_argument("-f", "--pattern", required=True, metavar="GLOB", help="file pattern")
     ti.add_argument("-n", "--dry-run", action="store_true", help="show the plan only")
     ti.set_defaults(func=cmd_tider)
+
+    up = sub.add_parser(
+        "upscale",
+        help="AI upscale via gor_upscale in the realesrgan conda env",
+        description="AI upscaling with Real-ESRGAN. The heavy dependencies live in a "
+        "separate conda environment, invoked as a subprocess. Model defaults to "
+        "gor_upscale's own (anime6b). Use --models to list available models.",
+    )
+    up.add_argument("input", nargs="?", help="input image (PNG)")
+    up.add_argument("-m", "--model", help="model name")
+    up.add_argument("-o", "--output", type=Path, help="output file")
+    up.add_argument("-O", "--overwrite", action="store_true")
+    up.add_argument("--tile", type=int, default=0)
+    up.add_argument("--tile_pad", type=int, default=10)
+    up.add_argument("--pre_pad", type=int, default=0)
+    up.add_argument("--half", action="store_true")
+    up.add_argument("--outscale", type=float)
+    up.add_argument("--test", action="store_true", help="test all models on the input")
+    up.add_argument("--models", action="store_true", help="list models and exit")
+    up.set_defaults(func=cmd_upscale)
     return p
 
 

@@ -18,6 +18,7 @@ mapping from old script names.
 | `farg` | Recolours PNG icons with the mean or a chosen RGB, keeping transparency and dark outlines. Output goes to `./recolored` unless `-o` is given. |
 | `mindre` | Downscaled JPG/PNG copies in `./mindre`. Thin entry point for `gor_mindre`, which must be on `PATH`; it owns the metadata-preserving pipeline. |
 | `tider` | Shifts EXIF dates and the `HHMMSS` part of file names by an offset (`-t -01:01:00 -f '250419*'`). Prints the plan first; `-n` previews only. Requires `exiftool`. |
+| `upscale` | AI upscaling via `gor_upscale.py` in the `realesrgan` conda env (subprocess). Override with `BILD_UPSCALE_PYTHON` / `BILD_UPSCALE_SCRIPT`. |
 
 ## Anonymising photos for publication
 
