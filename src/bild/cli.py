@@ -30,6 +30,54 @@ def _out_path(src: Path, outdir: Path | None, suffix: str) -> Path:
     return directory / f"{src.stem}{suffix}.jpg"
 
 
+def _rgb(value: str) -> tuple[int, int, int]:
+    parts = value.split(",")
+    if len(parts) != 3:
+        raise argparse.ArgumentTypeError("RGB must be R,G,B with integers 0-255")
+    try:
+        colour = tuple(int(part.strip()) for part in parts)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("RGB must be R,G,B with integers 0-255") from error
+    if not all(0 <= channel <= 255 for channel in colour):
+        raise argparse.ArgumentTypeError("RGB channels must be 0-255")
+    return colour
+
+
+def cmd_tider(args: argparse.Namespace) -> int:
+    from .tider import run_tider
+
+    return run_tider(args.pattern, args.offset, dry_run=args.dry_run)
+
+
+def cmd_mindre(args: argparse.Namespace) -> int:
+    from .mindre import run_mindre
+
+    size = args.size
+    files = list(args.files)
+    if files and files[0].isdigit() and size == 800:
+        size = int(files.pop(0))
+    return run_mindre(
+        size=size,
+        quality=args.quality,
+        outdir=args.outdir,
+        files=files,
+        force=args.force,
+    )
+
+
+def cmd_farg(args: argparse.Namespace) -> int:
+    from .farg import run_farg
+
+    return run_farg(
+        args.files,
+        colour=args.colour,
+        overwrite=args.overwrite,
+        find_mean=args.find_mean,
+        preserve_dark=args.preserve_dark,
+        threshold=args.threshold,
+    )
+
+
 def cmd_blur(args: argparse.Namespace) -> int:
     from .blur import blur, drop_kept, frac_to_box, parse_frac_box, preview
     from .faces import detect
@@ -309,6 +357,55 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-named", action="store_true", help="also rename files that already carry a date"
     )
     n.set_defaults(func=cmd_namna)
+
+    fg = sub.add_parser(
+        "farg",
+        help="recolour PNG icons with a mean or chosen RGB, keeping transparency",
+        description="Recolour PNG icons. By default the light fill pixels take the mean "
+        "colour of all visible pixels; dark outlines are preserved. Output goes "
+        "to ./recolored unless --overwrite is given.",
+    )
+    fg.add_argument("files", nargs="+", type=Path)
+    fg.add_argument("-c", "--colour", type=_rgb, metavar="R,G,B")
+    fg.add_argument("-o", "--overwrite", action="store_true", help="write over the originals")
+    fg.add_argument("-f", "--find-mean", action="store_true", help="only report the colour")
+    dark = fg.add_mutually_exclusive_group()
+    dark.add_argument(
+        "--preserve-dark", dest="preserve_dark", action="store_true", default=True,
+        help="keep pixels darker than the threshold (default)",
+    )
+    dark.add_argument(
+        "--no-preserve-dark", dest="preserve_dark", action="store_false",
+        help="recolour every visible pixel",
+    )
+    fg.add_argument("--threshold", type=int, default=170, help="luminance threshold 0-255")
+    fg.set_defaults(func=cmd_farg)
+
+    mi = sub.add_parser(
+        "mindre",
+        help="make downscaled copies with gor_mindre (needs it on PATH)",
+        description="Downscaled JPG/PNG copies in a subdirectory. Needs the gor_mindre "
+        "shell tool on PATH; it owns the ImageMagick/jpegtran/oxipng pipeline so "
+        "EXIF and XMP survive. A bare leading number is the size in pixels.",
+    )
+    mi.add_argument("files", nargs="*", help="files, or SIZE followed by files")
+    mi.add_argument("-s", "--size", type=int, default=800, help="longest side in pixels")
+    mi.add_argument("-q", "--quality", type=int, default=90, help="JPEG quality 1-100")
+    mi.add_argument("-o", "--outdir", type=Path, default=Path("mindre"))
+    mi.add_argument("-f", "--force", action="store_true", help="overwrite existing copies")
+    mi.set_defaults(func=cmd_mindre)
+
+    ti = sub.add_parser(
+        "tider",
+        help="shift EXIF dates and the time in photo file names",
+        description="Shift all EXIF dates and the HHMMSS part of matching file names "
+        "by an offset such as -01:01:00. Prints the plan before writing; use -n "
+        "to preview only.",
+    )
+    ti.add_argument("-t", "--offset", required=True, metavar="±HH:MM:SS")
+    ti.add_argument("-f", "--pattern", required=True, metavar="GLOB", help="file pattern")
+    ti.add_argument("-n", "--dry-run", action="store_true", help="show the plan only")
+    ti.set_defaults(func=cmd_tider)
     return p
 
 
