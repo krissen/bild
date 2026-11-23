@@ -23,7 +23,7 @@ def test_compute_spegla_moves_exact_token(tmp_path):
     source, target, photo = make_tree(tmp_path)
     safe, unresolved = compute_spegla_moves(source, target)
 
-    assert [(s.name, t.name) for s, t in safe] == [(photo.name, photo.name)]
+    assert [(s.name, t.name) for s, t, _sc in safe] == [(photo.name, photo.name)]
     assert safe[0][1].parent == target / "261031" / "1-Furustigens_trappa"
     assert unresolved == []
 
@@ -39,6 +39,29 @@ def test_compute_spegla_moves_reports_unresolved(tmp_path):
 
     assert safe == []  # ambiguous token: the same timestamp in two source folders
     assert {p.name for p in unresolved} == {photo.name, other.name}
+
+
+def test_datum_shared_sidecar_is_claimed_once(tmp_path):
+    from bild.flytta import compute_datum_moves
+
+    root = tmp_path / "raws"
+    root.mkdir()
+    (root / "260101_120000.NEF").write_bytes(b"raw")
+    (root / "260101_120000.jpg").write_bytes(b"jpg")
+    (root / "260101_120000.xmp").write_text("xmp")
+
+    groups = compute_datum_moves(root)
+    claimed = [sc for pairs in groups.values() for _main, sidecars in pairs for sc in sidecars]
+    assert len(claimed) == 1
+
+
+def test_spegla_shared_sidecar_is_claimed_once(tmp_path):
+    source, target, _photo = make_tree(tmp_path)
+    (target / "261031_103851.Dixi.NEF").write_bytes(b"raw")
+
+    safe, _unresolved = compute_spegla_moves(source, target)
+    claimed = [sc for _src, _dst, sidecars in safe for sc in sidecars]
+    assert len(claimed) == 1
 
 
 def test_flytta_spegla_dry_run_does_not_move(tmp_path, capsys):

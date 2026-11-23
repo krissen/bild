@@ -81,6 +81,18 @@ def find_sidecar_files(file: Path) -> list[Path]:
     return []
 
 
+def claim_sidecars(path: Path, claimed: set[Path]) -> list[Path]:
+    """Return only sidecars not yet claimed by another move in the same plan.
+
+    A RAW/JPEG pair with a shared XMP must not move that sidecar twice: the
+    second move would fail on an already occupied target, leaving a half-done
+    plan. Claiming at plan time also keeps dry-run honest.
+    """
+    sidecars = [sc for sc in find_sidecar_files(path) if sc.resolve() not in claimed]
+    claimed.update(sc.resolve() for sc in sidecars)
+    return sidecars
+
+
 def _is_case_only_same(a: Path, b: Path) -> bool:
     try:
         return a.exists() and a.samefile(b)

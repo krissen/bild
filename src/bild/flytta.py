@@ -13,9 +13,9 @@ from pathlib import Path
 from .moves import (
     JPEG_EXTENSIONS,
     RAW_EXTENSIONS,
+    claim_sidecars,
     extract_date,
     extract_timestamp,
-    find_sidecar_files,
     iter_supported_images,
     move_unit,
     preflight_destinations,
@@ -36,7 +36,7 @@ def build_source_index(source_root: Path) -> dict[str, set[Path]]:
 
 def compute_spegla_moves(
     source_root: Path, target_root: Path
-) -> tuple[list[tuple[Path, Path]], list[Path]]:
+) -> tuple[list[tuple[Path, Path, list[Path]]], list[Path]]:
     """Classify root images as safe moves or unresolved.
 
     Only an unambiguous source folder counts as safe; a token found in several
@@ -44,8 +44,9 @@ def compute_spegla_moves(
     the source root itself has no subfolder to mirror and is skipped.
     """
     index = build_source_index(source_root)
-    safe: list[tuple[Path, Path]] = []
+    safe: list[tuple[Path, Path, list[Path]]] = []
     unresolved: list[Path] = []
+    claimed: set[Path] = set()
     for path in iter_supported_images(target_root, recursive=False):
         parsed = extract_timestamp(path.name)
         if not parsed:
@@ -59,7 +60,8 @@ def compute_spegla_moves(
         folder = next(iter(folders))
         if folder == Path("."):
             continue
-        safe.append((path, target_root / folder / path.name))
+        target = target_root / folder / path.name
+        safe.append((path, target, claim_sidecars(path, claimed)))
     return safe, unresolved
 
 
@@ -126,6 +128,7 @@ def compute_datum_moves(
 ) -> dict[str, list[tuple[Path, list[Path]]]]:
     """Group root images by their leading YYMMDD, carrying sidecars along."""
     groups: dict[str, list[tuple[Path, list[Path]]]] = defaultdict(list)
+    claimed: set[Path] = set()
     for path in iter_supported_images(root, recursive=False):
         date = extract_date(path.name)
         if not date:
@@ -138,7 +141,7 @@ def compute_datum_moves(
             continue
         if to_date and date > to_date:
             continue
-        groups[date].append((path, find_sidecar_files(path)))
+        groups[date].append((path, claim_sidecars(path, claimed)))
     return dict(groups)
 
 
@@ -180,12 +183,11 @@ def execute_datum_moves(
 
 
 def execute_spegla_moves(
-    pairs: list[tuple[Path, Path]], *, dry_run: bool, verbose: bool
+    pairs: list[tuple[Path, Path, list[Path]]], *, dry_run: bool, verbose: bool
 ) -> tuple[int, int]:
-    """Move each image with its sidecar; return (moved, failed) counts."""
+    """Move each image with the sidecars claimed for it in the plan."""
     moved = failed = 0
-    for source, target in pairs:
-        sidecars = find_sidecar_files(source)
+    for source, target, sidecars in pairs:
         sidecar_pairs = [(sc, target.with_suffix(sc.suffix)) for sc in sidecars]
         if dry_run:
             error = preflight_destinations([target, *(dst for _src, dst in sidecar_pairs)])
