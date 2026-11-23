@@ -181,6 +181,27 @@ def test_namna_dry_run_does_not_rename(tmp_path, capsys):
     assert src.exists()
 
 
+def test_exif_dates_treats_status_2_as_no_dates(monkeypatch):
+    monkeypatch.setattr(
+        namna.subprocess,
+        "run",
+        lambda command, **kwargs: SimpleNamespace(returncode=2, stdout="", stderr=""),
+    )
+    assert namna.exif_dates([Path("/tmp/DSC_0001.NEF")]) == {}
+
+
+def test_cli_namna_status_2_is_not_an_error(tmp_path, monkeypatch, capsys):
+    src = tmp_path / "DSC_0001.NEF"
+    src.write_bytes(b"raw")
+    monkeypatch.setattr(
+        namna.subprocess,
+        "run",
+        lambda command, **kwargs: SimpleNamespace(returncode=2, stdout="", stderr=""),
+    )
+    assert main(["namna", str(src)]) == 0
+    assert "without EXIF date: 1" in capsys.readouterr().out
+
+
 def test_exif_dates_reports_exiftool_failure(monkeypatch):
     monkeypatch.setattr(
         namna.subprocess,

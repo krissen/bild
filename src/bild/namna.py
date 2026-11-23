@@ -45,6 +45,10 @@ def exif_dates(files: list[Path]) -> dict[Path, tuple[str, str]]:
         *[str(f) for f in files],
     ]
     result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300)
+    # exiftool returns 2 when every file failed the `-if defined $CreateDate`
+    # condition — that is an ordinary "no dates here" result, not a read error.
+    if result.returncode == 2:
+        return {}
     if result.returncode != 0:
         detail = result.stderr.strip() or f"exiftool exited with status {result.returncode}"
         raise RuntimeError(detail[:300])
