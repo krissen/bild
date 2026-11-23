@@ -75,6 +75,25 @@ def test_tider_exif_failure_prevents_renames(tmp_path, monkeypatch):
     assert not (tmp_path / "250419_100100.jpg").exists()
 
 
+def test_tider_renames_sidecar_with_main(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    raw = tmp_path / "260101_120000.NEF"
+    sidecar = tmp_path / "260101_120000.xmp"
+    raw.write_bytes(b"raw")
+    sidecar.write_text("xmp")
+    monkeypatch.setattr(tider, "find_exiftool", lambda: "/usr/bin/exiftool")
+    monkeypatch.setattr(
+        tider.subprocess,
+        "run",
+        lambda command, **kwargs: SimpleNamespace(returncode=0),
+    )
+
+    assert main(["tider", "-t", "+00:01:00", "-f", "*.NEF"]) == 0
+    assert (tmp_path / "260101_120100.NEF").exists()
+    assert (tmp_path / "260101_120100.xmp").read_text() == "xmp"
+    assert not sidecar.exists()
+
+
 def test_tider_applies_exif_and_renames(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     photo = tmp_path / "250419_100000_Linda.jpg"

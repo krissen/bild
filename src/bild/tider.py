@@ -2,6 +2,7 @@
 
 Ported from `fixa_fototider.zsh`. Both the EXIF dates and the file names change,
 so a preview is printed before anything is written and `-n` shows it only.
+XMP sidecars follow their main image even if the pattern did not match them.
 """
 
 from __future__ import annotations
@@ -13,12 +14,15 @@ from glob import glob
 from pathlib import Path
 
 from .exiftool import find_exiftool
-from .moves import move_unit
+from .moves import claim_sidecars, move_unit
 
 OFFSET_PATTERN = re.compile(r"^([+-])(\d{2}):(\d{2}):(\d{2})$")
 NAME_PATTERN = re.compile(r"^(\d{6})_(\d{6})(.*)\.([^.]+)$")
 EXIF_SUFFIXES = {".nef", ".jpg", ".jpeg"}
 ALL_SUFFIXES = EXIF_SUFFIXES | {".xmp"}
+
+# (main source, main target, sidecar pairs that move with it)
+Rename = tuple[Path, Path, list[tuple[Path, Path]]]
 
 
 def parse_offset(value: str) -> tuple[int, str, str]:
@@ -45,35 +49,40 @@ def shifted_name(name: str, seconds: int) -> str | None:
     return f"{date}_{shifted}{suffix}.{extension}"
 
 
-def preflight_renames(renames: list[tuple[Path, Path]]) -> str | None:
+def preflight_renames(renames: list[Rename]) -> str | None:
     """Reject blocked or colliding destinations before any metadata is written."""
-    sources = {source.resolve() for source, _target in renames}
+    sources: set[Path] = set()
+    for source, _target, sidecars in renames:
+        sources.add(source.resolve())
+        sources.update(sc_src.resolve() for sc_src, _dst in sidecars)
     seen: set[str] = set()
-    for _source, target in renames:
-        key = str(target).casefold()
-        if key in seen:
-            return f"målnamn krockar inom operationen: {target.name}"
-        seen.add(key)
-        if target.exists() and target.resolve() not in sources:
-            return f"målet finns redan: {target}"
+    for _source, target, sidecars in renames:
+        for destination in (target, *(dst for _src, dst in sidecars)):
+            key = str(destination).casefold()
+            if key in seen:
+                return f"målnamn krockar inom operationen: {destination.name}"
+            seen.add(key)
+            if destination.exists() and destination.resolve() not in sources:
+                return f"målet finns redan: {destination}"
     return None
 
 
-def order_renames(renames: list[tuple[Path, Path]]) -> list[tuple[Path, Path]]:
+def order_renames(renames: list[Rename]) -> list[Rename]:
     """Order a rename chain so each destination is vacated before it is used.
 
     Raises on a cycle, which cannot be resolved without a temporary name.
     """
-    pending = {source.resolve(): (source, target) for source, target in renames}
-    ordered: list[tuple[Path, Path]] = []
+    pending = {source.resolve(): (source, target, sidecars)
+               for source, target, sidecars in renames}
+    ordered: list[Rename] = []
     while pending:
-        for key, (source, target) in list(pending.items()):
+        for key, (source, target, sidecars) in list(pending.items()):
             if target.resolve() not in pending:
-                ordered.append((source, target))
+                ordered.append((source, target, sidecars))
                 del pending[key]
                 break
         else:
-            names = ", ".join(source.name for source, _target in pending.values())
+            names = ", ".join(source.name for source, _target, _scs in pending.values())
             raise ValueError(f"cirkulära omnamngivningar: {names}")
     return ordered
 
@@ -85,6 +94,29 @@ def resolve_files(pattern: str) -> list[Path]:
         for path in (Path(match) for match in glob(pattern))
         if path.is_file() and path.suffix.lower() in ALL_SUFFIXES
     )
+
+
+def build_renames(files: list[Path], seconds: int) -> list[Rename]:
+    """Plan main-file renames, attaching any unclaimed XMP sidecar to its main."""
+    base = [
+        (path, path.with_name(shifted))
+        for path in files
+        if (shifted := shifted_name(path.name, seconds)) is not None
+    ]
+    claimed: set[Path] = set()
+    renames: list[Rename] = []
+    for source, target in base:
+        sidecars: list[tuple[Path, Path]] = []
+        if source.suffix.lower() in EXIF_SUFFIXES:
+            for sidecar in claim_sidecars(source, claimed):
+                name = shifted_name(sidecar.name, seconds)
+                sidecar_target = sidecar.parent / (name or target.with_suffix(sidecar.suffix).name)
+                sidecars.append((sidecar, sidecar_target))
+        renames.append((source, target, sidecars))
+
+    # An XMP the pattern matched explicitly is already carried by its main.
+    attached = {sc.resolve() for _s, _t, pairs in renames for sc, _dst in pairs}
+    return [rename for rename in renames if rename[0].resolve() not in attached]
 
 
 def run_tider(pattern: str, offset: str, *, dry_run: bool) -> int:
@@ -100,11 +132,8 @@ def run_tider(pattern: str, offset: str, *, dry_run: bool) -> int:
         print(f"No files match {pattern!r}.")
         return 1
     exif_files = [path for path in files if path.suffix.lower() in EXIF_SUFFIXES]
-    renames = [
-        (path, path.with_name(shifted))
-        for path in files
-        if (shifted := shifted_name(path.name, seconds)) is not None
-    ]
+    renames = build_renames(files, seconds)
+
     problem = preflight_renames(renames)
     if problem:
         print(f"FEL: {problem}", file=sys.stderr)
@@ -115,12 +144,15 @@ def run_tider(pattern: str, offset: str, *, dry_run: bool) -> int:
         print(f"FEL: {error}", file=sys.stderr)
         return 2
 
+    count = len(renames) + sum(len(pairs) for _s, _t, pairs in renames)
     print(
         f"Offset {offset} ({seconds} s): {len(files)} files, "
-        f"{len(exif_files)} EXIF updates, {len(renames)} renames."
+        f"{len(exif_files)} EXIF updates, {count} renames."
     )
-    for source, target in renames:
+    for source, target, sidecars in renames:
         print(f"  {source.name} -> {target.name}")
+        for sidecar, sidecar_target in sidecars:
+            print(f"    {sidecar.name} -> {sidecar_target.name}")
 
     if dry_run:
         print("(dry) nothing changed")
@@ -146,10 +178,10 @@ def run_tider(pattern: str, offset: str, *, dry_run: bool) -> int:
             return 1
 
     failed = 0
-    for source, target in renames:
+    for source, target, sidecars in renames:
         try:
-            move_unit(source, target)
+            move_unit(source, target, sidecars)
         except OSError as error:
             failed += 1
-            print(f"FEL: {source.name}: {error}")
+            print(f"FEL: {source.name}: {error}", file=sys.stderr)
     return 1 if failed else 0
