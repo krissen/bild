@@ -15,7 +15,7 @@ mapping from old script names.
 | `strip` | Removes metadata (keeps orientation and ICC), sets photographer; with `-o` copies first and can rename via a tab-separated map. |
 | `flytta` | Moves images. `--spegla` puts developed images in the same relative folders as their raw sources (default `~/Pictures/nerladdat` → target directory); `--datum` groups files into `YYMMDD/` folders. With no mode, the files in the target directory decide. Always preview with `-n` first. |
 | `namna` | Renames files from EXIF `CreateDate` to `YYMMDD_HHMMSS`, with `-N` suffixes for same-second frames; XMP sidecars follow. Requires `exiftool`. |
-| `farg` | Recolours PNG icons with the mean or a chosen RGB, keeping transparency and dark outlines. Output goes to `./recolored` unless `-o` is given. |
+| `farg` | Recolours PNG icons with the mean or a chosen RGB, keeping transparency and dark outlines. Output goes to `./recolored`; `--overwrite` (`-o`) writes in place instead. |
 | `mindre` | Downscaled JPG/PNG copies in `./mindre`. Thin entry point for `gor_mindre`, which must be on `PATH`; it owns the metadata-preserving pipeline. |
 | `tider` | Shifts EXIF dates and the `HHMMSS` part of file names by an offset (`-t -01:01:00 -f '250419*'`). Prints the plan first; `-n` previews only. Requires `exiftool`. |
 | `upscale` | AI upscaling via `gor_upscale.py` in the `realesrgan` conda env (subprocess). Override with `BILD_UPSCALE_PYTHON` / `BILD_UPSCALE_SCRIPT`. |

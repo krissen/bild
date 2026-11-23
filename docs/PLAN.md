@@ -148,6 +148,24 @@ Lightroom's valid `stEvt:changed="/"` attribute. Output metadata was intact
 `scripts` repo with a separate commit (`5e66c1c` on the PR branch): `-quiet` on the `magick`
 command. `gor_mindre` stays the engine behind `bild mindre`.
 
+## Follow-ups from the final review (2026-11-23)
+
+Nagelfararna returned `approved with follow-ups`. None of these block merge;
+they are tracked here so they are not lost. Full issue files live in the
+central coms channel `nagelfar/bild-image-cli-consolidation`.
+
+1. **`farg -o` documentation.** Fixed before merge: `-o` is `--overwrite`
+   (in place), not an output-directory switch. README now says so. The flag
+   name is still inconsistent with `-o/--output` in the other verbs — consider
+   renaming it in a later, separate change.
+2. **`tider` midnight wrap.** The filename time wraps at midnight without
+   rolling the date, so the name and EXIF date diverge for offsets crossing
+   00:00. This is inherited from `fixa_fototider.zsh` and covered by a test;
+   confirm whether that is the intended behaviour before changing it.
+3. **Bare `bild namna` only matches `*.NEF`.** Other RAW formats (CR3, ARW,
+   DNG, …) are renamed when named explicitly but skipped by a bare invocation.
+   Consider widening the default glob to all supported RAW extensions.
+
 ## Open questions
 
 - Should `filer2mappar.py` eventually be removed from ansikten, or kept as that
