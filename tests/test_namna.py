@@ -69,6 +69,17 @@ def test_compute_renames_raw_and_jpeg_share_one_stem():
     assert [dst.name for _src, dst in renames] == ["260101_120000.NEF", "260101_120000.jpg"]
 
 
+def test_plan_attaches_sidecar_for_non_nef_raw(tmp_path):
+    raw = tmp_path / "DSC_0001.CR3"
+    sidecar = tmp_path / "DSC_0001.xmp"
+    raw.write_bytes(b"raw")
+    sidecar.write_text("xmp")
+
+    plan = namna.build_move_plan([("260101_120000", "00", raw)])
+    assert namna.execute_renames(plan, dry_run=False) == (1, 0)
+    assert (tmp_path / "260101_120000.xmp").read_text() == "xmp"
+
+
 def test_plan_freezes_sidecar_associations(tmp_path):
     raw = tmp_path / "DSC_0001.NEF"
     sidecar = tmp_path / "DSC_0001.xmp"

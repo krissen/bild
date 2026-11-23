@@ -14,11 +14,10 @@ from collections import defaultdict
 from pathlib import Path
 
 from .exiftool import find_exiftool
-from .moves import claim_sidecars, move_unit, preflight_destinations
+from .moves import SUPPORTED_EXTENSIONS, claim_sidecars, move_unit, preflight_destinations
 
 _NAMED_REST = re.compile(r"(-\d+)?[a-zA-Z]{0,3}(_.*)?$")
 _BARE = "bare"
-EXIF_SUFFIXES = {".nef", ".jpg", ".jpeg"}
 
 
 def exif_dates(files: list[Path]) -> dict[Path, tuple[str, str]]:
@@ -131,7 +130,7 @@ def build_move_plan(
     sidecars_by_main: dict[Path, list[Path]] = {}
     attached: set[Path] = set()
     for _timestamp, _subsecond, path in entries:
-        if path.suffix.lower() in EXIF_SUFFIXES:
+        if path.suffix.lower() in SUPPORTED_EXTENSIONS:
             sidecars = claim_sidecars(path, claimed)
             sidecars_by_main[path.resolve()] = sidecars
             attached.update(sidecar.resolve() for sidecar in sidecars)
