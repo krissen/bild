@@ -29,6 +29,31 @@ def test_compute_renames_protected_file_reserves_bare_slot():
     assert renames[0][1].name == "260101_120000-00.NEF"
 
 
+def test_compute_renames_raw_and_jpeg_share_one_stem():
+    raw = Path("/tmp/DSC_0001.NEF")
+    jpg = Path("/tmp/DSC_0001.jpg")
+    renames = namna.compute_renames(
+        [("260101_120000", "00", raw), ("260101_120000", "00", jpg)]
+    )
+    assert [dst.name for _src, dst in renames] == ["260101_120000.NEF", "260101_120000.jpg"]
+
+
+def test_execute_renames_moves_shared_sidecar_once(tmp_path):
+    raw = tmp_path / "DSC_0001.NEF"
+    jpg = tmp_path / "DSC_0001.jpg"
+    sidecar = tmp_path / "DSC_0001.xmp"
+    for path in (raw, jpg):
+        path.write_bytes(b"x")
+    sidecar.write_text("xmp")
+    renames = namna.compute_renames(
+        [("260101_120000", "00", raw), ("260101_120000", "00", jpg)]
+    )
+
+    assert namna.execute_renames(renames, dry_run=False) == (2, 0)
+    assert (tmp_path / "260101_120000.xmp").read_text() == "xmp"
+    assert not sidecar.exists()
+
+
 def test_execute_renames_moves_sidecar(tmp_path):
     src = tmp_path / "DSC_0001.NEF"
     sidecar = tmp_path / "DSC_0001.xmp"

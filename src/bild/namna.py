@@ -10,11 +10,11 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 from .exiftool import find_exiftool
-from .moves import find_sidecar_files, move_unit, preflight_destinations
+from .moves import claim_sidecars, move_unit, preflight_destinations
 
 _NAMED_REST = re.compile(r"(-\d+)?[a-zA-Z]{0,3}(_.*)?$")
 _BARE = "bare"
@@ -62,7 +62,12 @@ def _slot(name: str, timestamp: str) -> str | int:
 def compute_renames(
     entries: list[tuple[str, str, Path]], *, include_named: bool = False
 ) -> list[tuple[Path, Path]]:
-    """Plan renames for (timestamp, subsecond, path) entries."""
+    """Plan renames for (timestamp, subsecond, path) entries.
+
+    One exposure is one (timestamp, subsecond) pair: its RAW and JPEG variants
+    share a destination stem so a shared XMP sidecar stays associated with both.
+    Distinct exposures at the same timestamp still get distinct -N slots.
+    """
     to_rename: list[tuple[str, str, Path]] = []
     protected: list[tuple[str, str, Path]] = []
     for entry in entries:
@@ -71,37 +76,44 @@ def compute_renames(
         else:
             to_rename.append(entry)
 
-    counts = Counter(timestamp for timestamp, _sub, _src in to_rename)
-    digits = {ts: max(2, len(str(count - 1))) for ts, count in counts.items()}
+    exposures: dict[str, dict[str, list[tuple[str, str, Path]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for timestamp, subsecond, src in to_rename:
+        exposures[timestamp][subsecond].append((timestamp, subsecond, src))
+
     taken: dict[str, set] = defaultdict(set)
     for timestamp, _sub, src in protected:
         taken[timestamp].add(_slot(src.name, timestamp))
 
     renames: list[tuple[Path, Path]] = []
-    for timestamp, subsecond, src in sorted(entries, key=lambda e: (e[0], e[1], e[2].name)):
-        if not include_named and is_already_named(src.name, timestamp):
-            continue
-        slots = taken[timestamp]
-        if counts[timestamp] == 1 and _BARE not in slots:
-            base = timestamp
-            slots.add(_BARE)
-        else:
-            index = 0
-            while index in slots:
-                index += 1
-            slots.add(index)
-            base = f"{timestamp}-{str(index).zfill(digits[timestamp])}"
-        dst = src.parent / f"{base}{src.suffix}"
-        if src.name != dst.name:
-            renames.append((src, dst))
+    for timestamp, by_subsecond in sorted(exposures.items()):
+        subseconds = sorted(by_subsecond)
+        digits = max(2, len(str(len(subseconds) + len(taken[timestamp]) - 1)))
+        for subsecond in subseconds:
+            slots = taken[timestamp]
+            if len(subseconds) == 1 and _BARE not in slots:
+                base = timestamp
+                slots.add(_BARE)
+            else:
+                index = 0
+                while index in slots:
+                    index += 1
+                slots.add(index)
+                base = f"{timestamp}-{str(index).zfill(digits)}"
+            for _ts, _sub, src in sorted(by_subsecond[subsecond], key=lambda e: e[2].name):
+                dst = src.parent / f"{base}{src.suffix}"
+                if src.name != dst.name:
+                    renames.append((src, dst))
     return renames
 
 
 def execute_renames(renames: list[tuple[Path, Path]], *, dry_run: bool) -> tuple[int, int]:
     """Rename with sidecars, never overwriting. Returns (renamed, failed)."""
     moved = failed = 0
+    claimed: set[Path] = set()
     for src, dst in renames:
-        sidecars = find_sidecar_files(src)
+        sidecars = claim_sidecars(src, claimed)
         sidecar_pairs = [(sc, dst.with_suffix(sc.suffix)) for sc in sidecars]
         if dry_run:
             error = preflight_destinations([dst, *(d for _s, d in sidecar_pairs)])
