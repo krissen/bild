@@ -9,6 +9,8 @@ from pathlib import Path
 
 from . import __version__
 
+DEFAULT_SOURCE_ROOT = Path("~/Pictures/nerladdat").expanduser()
+
 EPILOG = """\
 Run 'bild <verb> --help' for the options of each verb.
 
@@ -16,6 +18,10 @@ Typical anonymising workflow:
   bild blur photo.jpg -o out/ --preview review/   # check review/*.jpg
   bild blur photo.jpg -o out/ --add 0.35,0.43,0.41,0.52 --keep 0.27,0.18,0.33,0.31
   bild strip out/*.jpg --artist "Kristian Niemi"
+
+Move developed images to the folders their raw files live in:
+  bild flytta -n --spegla ~/Pictures/framkallat   # preview first
+  bild flytta --spegla ~/Pictures/framkallat
 """
 
 
@@ -49,6 +55,38 @@ def cmd_blur(args: argparse.Namespace) -> int:
         scores = " ".join("manual" if b.score < 0 else f"{b.score:.2f}" for b in boxes)
         print(f"{src.name}: {len(boxes)} blurred, {len(kept)} kept -> {dst}  [{scores}]")
     return 0
+
+
+def cmd_flytta(args: argparse.Namespace) -> int:
+    from .flytta import compute_spegla_moves, execute_spegla_moves
+
+    if not args.spegla:
+        raise SystemExit("no mode given: use --spegla (auto-detect arrives in phase 2)")
+    source_root = args.kallrot.expanduser().resolve()
+    target_root = args.target.expanduser().resolve()
+    for label, root in (("source root", source_root), ("target root", target_root)):
+        if not root.is_dir():
+            raise SystemExit(f"{label} does not exist or is not a directory: {root}")
+    if (
+        source_root == target_root
+        or source_root in target_root.parents
+        or target_root in source_root.parents
+    ):
+        raise SystemExit("source and target roots must not overlap")
+
+    safe, unresolved = compute_spegla_moves(source_root, target_root)
+    print(f"Safe: {len(safe)}, unresolved: {len(unresolved)}.")
+    if unresolved:
+        print("Unresolved files:", file=sys.stderr)
+        for path in unresolved:
+            print(f"  {path.name}", file=sys.stderr)
+
+    moved, failed = execute_spegla_moves(
+        safe, dry_run=args.dry_run, verbose=args.verbose or args.dry_run
+    )
+    if not args.dry_run:
+        print(f"Moved {moved} images.")
+    return 1 if unresolved or failed else 0
 
 
 def cmd_contact(args: argparse.Namespace) -> int:
@@ -174,6 +212,25 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--artist")
     s.add_argument("--copyright", help="default: 'Foto: <artist>'")
     s.set_defaults(func=cmd_strip)
+
+    f = sub.add_parser(
+        "flytta",
+        help="move images into date folders or mirror the source folder structure",
+        description="Move images. --spegla mirrors the relative folders of the source "
+        "images (default source root: ~/Pictures/nerladdat). --datum and the "
+        "auto-detecting default arrive in phase 2; see docs/PLAN.md.",
+    )
+    f.add_argument("target", nargs="?", type=Path, default=Path("."), metavar="MÅLMAPP")
+    f.add_argument("-n", "--dry-run", action="store_true", help="show what would be done")
+    f.add_argument("-v", "--verbose", action="store_true", help="show each move")
+    f.add_argument("--spegla", action="store_true", help="mirror the source folder structure")
+    f.add_argument(
+        "--kallrot",
+        type=Path,
+        default=DEFAULT_SOURCE_ROOT,
+        help=f"source tree (default: {DEFAULT_SOURCE_ROOT})",
+    )
+    f.set_defaults(func=cmd_flytta)
     return p
 
 

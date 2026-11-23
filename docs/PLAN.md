@@ -88,10 +88,9 @@ toolkit. Importing it from `bild` was rejected:
 | `core/fs_ops.py` | 947 lines | undo journal, batch rename, import semantics and face-DB path repair. Only `new_batch_id` + `rename_with_sidecars` + journal are used by `filer2mappar`; the journal belongs to ansikten's undo feature. |
 
 Importing `core` would also pull in `ansikten-backend`'s dependency tree
-(fastapi, uvicorn, rawpy, pyxdg, insightface pinned to 1.0.1 — potentially in
-conflict with bild's own insightface), couple bild's releases to another
-repository's API, and force ansikten to keep an internal module stable as a
-public surface. None of that buys anything for a small CLI.
+(fastapi, uvicorn, rawpy, pyxdg and a pinned insightface), couple bild's
+releases to another repository's API, and force ansikten to keep an internal
+module stable as a public surface. None of that buys anything for a small CLI.
 
 Consequence: copy the roughly 120 lines that are actually needed into
 `src/bild/moves.py` and `src/bild/exiftool.py`. **Ansikten is left untouched.**
@@ -109,7 +108,7 @@ flag if the need appears.
 | Phase | Content | Acceptance |
 |---|---|---|
 | 0 | This document; point `CLAUDE.md` and `README.md` at it | Plan lives in the repo; no code changed |
-| 1 | `src/bild/moves.py`; `bild flytta --spegla`; tests | `bild flytta -n --spegla` reports 47 safe / 1 unresolved on the current work set; `filer2mappar` still works |
+| 1 | `src/bild/moves.py`; `bild flytta --spegla`; tests | `bild flytta -n --spegla` produces the same move plan as `filer2mappar matcha-kalla` (34 safe / 1 unresolved at verification time); `filer2mappar` still works |
 | 2 | `bild flytta --datum`; auto-detect; `bild namna` (so the "Menade du namna?" hint resolves) | every row of the detection matrix tested; ambiguous input never mutates |
 | 3 | `farg`, `mindre`, `tider` | one verb per commit, each with tests |
 | 4 | `upscale` via subprocess with an explicit environment contract | works without making bild's venv heavy |

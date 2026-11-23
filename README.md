@@ -13,6 +13,7 @@ mapping from old script names.
 | `contact` | Contact sheet: thumbnails with index and file name. |
 | `level` | Straightens from measured lines (`--line`, averaged) or `--angle`, crops around `--corners`/`--crop`, warns about fill from outside the photo. |
 | `strip` | Removes metadata (keeps orientation and ICC), sets photographer; with `-o` copies first and can rename via a tab-separated map. |
+| `flytta` | Moves images. `--spegla` puts developed images in the same relative folders as their raw sources (default `~/Pictures/nerladdat` → target directory). Always preview with `-n` first. |
 
 ## Anonymising photos for publication
 
