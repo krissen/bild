@@ -146,6 +146,14 @@ def order_moves(moves: list[Move]) -> list[Move]:
 
 
 def _is_case_only_same(a: Path, b: Path) -> bool:
+    """True only for a case-only spelling change of the same file.
+
+    A symlink alias can pass `samefile()` while being a distinct directory
+    entry; treating that as case-only would let a rename replace the real file
+    with a self-referential link.
+    """
+    if str(a).casefold() != str(b).casefold():
+        return False
     try:
         return a.exists() and a.samefile(b)
     except OSError:
@@ -154,7 +162,7 @@ def _is_case_only_same(a: Path, b: Path) -> bool:
 
 def _safe_rename(src: Path, dst: Path) -> None:
     """Rename src to dst, handling a case-only rename on macOS."""
-    if dst.exists() and dst.samefile(src):
+    if _is_case_only_same(dst, src):
         tmp = src.with_name(f".{uuid.uuid4().hex}.rename.tmp")
         src.rename(tmp)
         tmp.rename(dst)

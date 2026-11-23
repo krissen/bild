@@ -66,6 +66,19 @@ def test_move_unit_refuses_overwrite(tmp_path):
     assert dst.read_bytes() == b"old"
 
 
+def test_move_unit_refuses_symlink_alias_target(tmp_path):
+    real = tmp_path / "260101_120000.NEF"
+    alias = tmp_path / "DSC_0001.NEF"
+    real.write_bytes(b"original")
+    alias.symlink_to(real.name)
+
+    with pytest.raises(FileExistsError):
+        move_unit(alias, real)
+
+    assert real.read_bytes() == b"original"
+    assert alias.is_symlink()
+
+
 def test_move_unit_rolls_back_when_a_sidecar_target_is_blocked(tmp_path):
     main = tmp_path / "a.jpg"
     sidecar = tmp_path / "a.xmp"
