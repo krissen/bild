@@ -211,10 +211,12 @@ def run_namna(files: list[Path], *, dry_run: bool, include_named: bool = False) 
 
     entries = []
     for path in files:
-        resolved = path.resolve()
-        if resolved in dates:
-            timestamp, subsecond = dates[resolved]
-            entries.append((timestamp, subsecond, resolved))
+        # EXIF is keyed by the resolved path, but the plan must operate on the
+        # path the user selected: otherwise a symlink renames its target away.
+        timestamp_pair = dates.get(path.resolve())
+        if timestamp_pair is not None:
+            timestamp, subsecond = timestamp_pair
+            entries.append((timestamp, subsecond, path))
     plan = build_move_plan(entries, include_named=include_named)
     try:
         plan = order_moves(plan)

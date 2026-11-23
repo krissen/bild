@@ -225,6 +225,24 @@ def test_cli_namna_propagates_exif_failure(tmp_path, monkeypatch, capsys):
     assert src.exists()
 
 
+def test_cli_namna_renames_selected_symlink_not_its_target(tmp_path, monkeypatch):
+    originals = tmp_path / "originals"
+    selected = tmp_path / "selected"
+    originals.mkdir()
+    selected.mkdir()
+    target = originals / "DSC_0001.NEF"
+    target.write_bytes(b"raw")
+    link = selected / "DSC_0001.NEF"
+    link.symlink_to(target)
+    monkeypatch.setattr(
+        namna, "exif_dates", lambda files: {link.resolve(): ("260101_120000", "00")}
+    )
+
+    assert main(["namna", str(link)]) == 0
+    assert (selected / "260101_120000.NEF").is_symlink()
+    assert target.exists()
+
+
 def test_cli_namna_uses_exif_dates(tmp_path, monkeypatch):
     src = tmp_path / "DSC_0001.NEF"
     src.write_bytes(b"raw")
