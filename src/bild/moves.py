@@ -95,6 +95,37 @@ def claim_sidecars(path: Path, claimed: set[Path]) -> list[Path]:
     return sidecars
 
 
+Move = tuple[Path, Path, list[tuple[Path, Path]]]
+
+
+def order_moves(moves: list[Move]) -> list[Move]:
+    """Order moves so each destination is vacated before it is written.
+
+    Sources include sidecars, so a plan that transfers metadata is ordered
+    correctly too. A cycle cannot be resolved without a temporary name and is
+    rejected before any filesystem change.
+    """
+    pending = {source.resolve(): (source, target, sidecars)
+               for source, target, sidecars in moves}
+    ordered: list[Move] = []
+    while pending:
+        all_sources: set[Path] = set()
+        for source, _target, sidecars in pending.values():
+            all_sources.add(source.resolve())
+            all_sources.update(sc_src.resolve() for sc_src, _dst in sidecars)
+        for key, move in list(pending.items()):
+            _source, target, sidecars = move
+            destinations = [target, *(dst for _src, dst in sidecars)]
+            if all(destination.resolve() not in all_sources for destination in destinations):
+                ordered.append(move)
+                del pending[key]
+                break
+        else:
+            names = ", ".join(source.name for source, _target, _scs in pending.values())
+            raise ValueError(f"cirkulära flyttar: {names}")
+    return ordered
+
+
 def _is_case_only_same(a: Path, b: Path) -> bool:
     try:
         return a.exists() and a.samefile(b)

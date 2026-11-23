@@ -69,6 +69,25 @@ def test_compute_renames_raw_and_jpeg_share_one_stem():
     assert [dst.name for _src, dst in renames] == ["260101_120000.NEF", "260101_120000.jpg"]
 
 
+def test_cli_namna_include_named_orders_dependencies(tmp_path, monkeypatch):
+    first = tmp_path / "260101_120000.jpg"
+    second = tmp_path / "260101_120000-00.jpg"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    monkeypatch.setattr(
+        namna,
+        "exif_dates",
+        lambda files: {
+            first.resolve(): ("260101_120000", "01"),
+            second.resolve(): ("260101_120000", "02"),
+        },
+    )
+
+    assert main(["namna", "--include-named", str(first), str(second)]) == 0
+    assert (tmp_path / "260101_120000-00.jpg").read_bytes() == b"first"
+    assert (tmp_path / "260101_120000-01.jpg").read_bytes() == b"second"
+
+
 def test_plan_attaches_sidecar_for_non_nef_raw(tmp_path):
     raw = tmp_path / "DSC_0001.CR3"
     sidecar = tmp_path / "DSC_0001.xmp"

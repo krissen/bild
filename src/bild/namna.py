@@ -14,7 +14,13 @@ from collections import defaultdict
 from pathlib import Path
 
 from .exiftool import find_exiftool
-from .moves import SUPPORTED_EXTENSIONS, claim_sidecars, move_unit, preflight_destinations
+from .moves import (
+    SUPPORTED_EXTENSIONS,
+    claim_sidecars,
+    move_unit,
+    order_moves,
+    preflight_destinations,
+)
 
 _NAMED_REST = re.compile(r"(-\d+)?[a-zA-Z]{0,3}(_.*)?$")
 _BARE = "bare"
@@ -194,6 +200,11 @@ def run_namna(files: list[Path], *, dry_run: bool, include_named: bool = False) 
             timestamp, subsecond = dates[resolved]
             entries.append((timestamp, subsecond, resolved))
     plan = build_move_plan(entries, include_named=include_named)
+    try:
+        plan = order_moves(plan)
+    except ValueError as error:
+        print(f"FEL: {error}", file=sys.stderr)
+        return 2
     print(f"Planned renames: {len(plan)}, without EXIF date: {len(files) - len(entries)}.")
     moved, failed = execute_renames(plan, dry_run=dry_run)
     if not dry_run:

@@ -14,7 +14,7 @@ from glob import glob
 from pathlib import Path
 
 from .exiftool import find_exiftool
-from .moves import claim_sidecars, move_unit
+from .moves import claim_sidecars, move_unit, order_moves
 
 OFFSET_PATTERN = re.compile(r"^([+-])(\d{2}):(\d{2}):(\d{2})$")
 NAME_PATTERN = re.compile(r"^(\d{6})_(\d{6})(.*)\.([^.]+)$")
@@ -65,26 +65,6 @@ def preflight_renames(renames: list[Rename]) -> str | None:
             if destination.exists() and destination.resolve() not in sources:
                 return f"målet finns redan: {destination}"
     return None
-
-
-def order_renames(renames: list[Rename]) -> list[Rename]:
-    """Order a rename chain so each destination is vacated before it is used.
-
-    Raises on a cycle, which cannot be resolved without a temporary name.
-    """
-    pending = {source.resolve(): (source, target, sidecars)
-               for source, target, sidecars in renames}
-    ordered: list[Rename] = []
-    while pending:
-        for key, (source, target, sidecars) in list(pending.items()):
-            if target.resolve() not in pending:
-                ordered.append((source, target, sidecars))
-                del pending[key]
-                break
-        else:
-            names = ", ".join(source.name for source, _target, _scs in pending.values())
-            raise ValueError(f"cirkulära omnamngivningar: {names}")
-    return ordered
 
 
 def resolve_files(pattern: str) -> list[Path]:
@@ -139,7 +119,7 @@ def run_tider(pattern: str, offset: str, *, dry_run: bool) -> int:
         print(f"FEL: {problem}", file=sys.stderr)
         return 2
     try:
-        renames = order_renames(renames)
+        renames = order_moves(renames)
     except ValueError as error:
         print(f"FEL: {error}", file=sys.stderr)
         return 2
