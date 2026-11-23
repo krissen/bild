@@ -15,10 +15,23 @@ Image tools behind one command with verbs (`src/bild/cli.py`). README has usage.
 3. Tests in `tests/`; anything that runs a model is marked `@pytest.mark.slow`.
 4. A row in the README verb table.
 
-Planned: Python scripts from `~/Documents/scripts` as verbs (`gor_bildflytt`,
-`gor_snittfarg`, `rensa_metadata`; `upscale` calls the conda env `realesrgan` in a
-subprocess), old names kept as symlinked shims; bash scripts as thin verbs later;
-name-based "blur everyone except X" from `~/.local/share/faceid/encodings.pkl`.
+## Consolidation
+
+`docs/PLAN.md` is the authoritative plan for migrating the loose image scripts
+into `bild`. Read it before adding a verb that replaces an existing tool: it
+holds the verb registry, the `flytta` detection contract, the dependency
+decision, the phase breakdown and the shim policy.
+
+Locked decisions (do not re-litigate without updating PLAN.md):
+
+- Verbs: `flytta` with `--datum` / `--spegla` modes, and `namna` for EXIF-date
+  renames. `spegla` is a mode, not a verb.
+- No runtime imports from `~/dev/ansikten` or other repositories. Copy small
+  helpers into `bild` instead; ansikten is left untouched.
+- Old executables stay as deprecated shims until migration is complete.
+
+Not covered by the migration: name-based "blur everyone except X" from
+`~/.local/share/faceid/encodings.pkl`.
 
 ## Conventions
 
