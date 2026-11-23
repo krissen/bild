@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from glob import glob
 from pathlib import Path
 
@@ -44,6 +45,39 @@ def shifted_name(name: str, seconds: int) -> str | None:
     return f"{date}_{shifted}{suffix}.{extension}"
 
 
+def preflight_renames(renames: list[tuple[Path, Path]]) -> str | None:
+    """Reject blocked or colliding destinations before any metadata is written."""
+    sources = {source.resolve() for source, _target in renames}
+    seen: set[str] = set()
+    for _source, target in renames:
+        key = str(target).casefold()
+        if key in seen:
+            return f"målnamn krockar inom operationen: {target.name}"
+        seen.add(key)
+        if target.exists() and target.resolve() not in sources:
+            return f"målet finns redan: {target}"
+    return None
+
+
+def order_renames(renames: list[tuple[Path, Path]]) -> list[tuple[Path, Path]]:
+    """Order a rename chain so each destination is vacated before it is used.
+
+    Raises on a cycle, which cannot be resolved without a temporary name.
+    """
+    pending = {source.resolve(): (source, target) for source, target in renames}
+    ordered: list[tuple[Path, Path]] = []
+    while pending:
+        for key, (source, target) in list(pending.items()):
+            if target.resolve() not in pending:
+                ordered.append((source, target))
+                del pending[key]
+                break
+        else:
+            names = ", ".join(source.name for source, _target in pending.values())
+            raise ValueError(f"cirkulära omnamngivningar: {names}")
+    return ordered
+
+
 def resolve_files(pattern: str) -> list[Path]:
     """Expand a glob pattern and keep only photo/sidecar extensions."""
     return sorted(
@@ -71,6 +105,16 @@ def run_tider(pattern: str, offset: str, *, dry_run: bool) -> int:
         for path in files
         if (shifted := shifted_name(path.name, seconds)) is not None
     ]
+    problem = preflight_renames(renames)
+    if problem:
+        print(f"FEL: {problem}", file=sys.stderr)
+        return 2
+    try:
+        renames = order_renames(renames)
+    except ValueError as error:
+        print(f"FEL: {error}", file=sys.stderr)
+        return 2
+
     print(
         f"Offset {offset} ({seconds} s): {len(files)} files, "
         f"{len(exif_files)} EXIF updates, {len(renames)} renames."
@@ -90,9 +134,15 @@ def run_tider(pattern: str, offset: str, *, dry_run: bool) -> int:
                 "-overwrite_original",
                 *[str(path) for path in exif_files],
             ]
-            subprocess.run(command, check=False)
+            result = subprocess.run(command, check=False)
+            if result.returncode != 0:
+                print(
+                    "FEL: exiftool kunde inte uppdatera alla filer; inga filer döps om.",
+                    file=sys.stderr,
+                )
+                return 1
         except FileNotFoundError as error:
-            print(f"FEL: {error}")
+            print(f"FEL: {error}", file=sys.stderr)
             return 1
 
     failed = 0

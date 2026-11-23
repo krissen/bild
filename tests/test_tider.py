@@ -30,6 +30,51 @@ def test_tider_dry_run_changes_nothing(tmp_path, monkeypatch, capsys):
     assert photo.exists()
 
 
+def test_tider_rename_chain_resolves_dependencies(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    first = tmp_path / "250419_100000.jpg"
+    second = tmp_path / "250419_100100.jpg"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    monkeypatch.setattr(tider, "find_exiftool", lambda: "/usr/bin/exiftool")
+    monkeypatch.setattr(
+        tider.subprocess,
+        "run",
+        lambda command, **kwargs: SimpleNamespace(returncode=0),
+    )
+
+    assert main(["tider", "-t", "+00:01:00", "-f", "*.jpg"]) == 0
+    assert (tmp_path / "250419_100100.jpg").read_bytes() == b"first"
+    assert (tmp_path / "250419_100200.jpg").read_bytes() == b"second"
+
+
+def test_tider_external_blocker_aborts_before_exif(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "250419_100000.jpg"
+    source.write_bytes(b"x")
+    (tmp_path / "250419_100100.jpg").write_bytes(b"blocking")
+    monkeypatch.setattr(tider, "find_exiftool", lambda: pytest.fail("exiftool called"))
+
+    assert main(["tider", "-t", "+00:01:00", "-f", "250419_100000.jpg"]) == 2
+    assert source.exists()
+
+
+def test_tider_exif_failure_prevents_renames(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "250419_100000.jpg"
+    source.write_bytes(b"x")
+    monkeypatch.setattr(tider, "find_exiftool", lambda: "/usr/bin/exiftool")
+    monkeypatch.setattr(
+        tider.subprocess,
+        "run",
+        lambda command, **kwargs: SimpleNamespace(returncode=1),
+    )
+
+    assert main(["tider", "-t", "+00:01:00", "-f", "*.jpg"]) == 1
+    assert source.exists()
+    assert not (tmp_path / "250419_100100.jpg").exists()
+
+
 def test_tider_applies_exif_and_renames(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     photo = tmp_path / "250419_100000_Linda.jpg"
