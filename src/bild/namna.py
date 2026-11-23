@@ -18,6 +18,7 @@ from .moves import claim_sidecars, move_unit, preflight_destinations
 
 _NAMED_REST = re.compile(r"(-\d+)?[a-zA-Z]{0,3}(_.*)?$")
 _BARE = "bare"
+EXIF_SUFFIXES = {".nef", ".jpg", ".jpeg"}
 
 
 def exif_dates(files: list[Path]) -> dict[Path, tuple[str, str]]:
@@ -76,35 +77,40 @@ def compute_renames(
         else:
             to_rename.append(entry)
 
-    exposures: dict[str, dict[str, list[tuple[str, str, Path]]]] = defaultdict(
-        lambda: defaultdict(list)
+    # timestamp -> subsecond -> original stem -> entries. Files sharing a stem
+    # are one frame (RAW + JPEG + XMP); distinct stems are distinct frames and
+    # must never collapse onto the same destination even within one second.
+    frames: dict[str, dict[str, dict[str, list[tuple[str, str, Path]]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(list))
     )
     for timestamp, subsecond, src in to_rename:
-        exposures[timestamp][subsecond].append((timestamp, subsecond, src))
+        frames[timestamp][subsecond][src.stem].append((timestamp, subsecond, src))
 
     taken: dict[str, set] = defaultdict(set)
     for timestamp, _sub, src in protected:
         taken[timestamp].add(_slot(src.name, timestamp))
 
     renames: list[tuple[Path, Path]] = []
-    for timestamp, by_subsecond in sorted(exposures.items()):
-        subseconds = sorted(by_subsecond)
-        digits = max(2, len(str(len(subseconds) + len(taken[timestamp]) - 1)))
-        for subsecond in subseconds:
-            slots = taken[timestamp]
-            if len(subseconds) == 1 and _BARE not in slots:
-                base = timestamp
-                slots.add(_BARE)
-            else:
-                index = 0
-                while index in slots:
-                    index += 1
-                slots.add(index)
-                base = f"{timestamp}-{str(index).zfill(digits)}"
-            for _ts, _sub, src in sorted(by_subsecond[subsecond], key=lambda e: e[2].name):
-                dst = src.parent / f"{base}{src.suffix}"
-                if src.name != dst.name:
-                    renames.append((src, dst))
+    for timestamp, by_subsecond in sorted(frames.items()):
+        by_subsecond = dict(sorted(by_subsecond.items()))
+        frame_count = sum(len(stems) for stems in by_subsecond.values())
+        digits = max(2, len(str(frame_count + len(taken[timestamp]) - 1)))
+        for stems in by_subsecond.values():
+            for entries_in_frame in sorted(stems.values()):
+                slots = taken[timestamp]
+                if frame_count == 1 and _BARE not in slots:
+                    base = timestamp
+                    slots.add(_BARE)
+                else:
+                    index = 0
+                    while index in slots:
+                        index += 1
+                    slots.add(index)
+                    base = f"{timestamp}-{str(index).zfill(digits)}"
+                for _ts, _sub, src in entries_in_frame:
+                    dst = src.parent / f"{base}{src.suffix}"
+                    if src.name != dst.name:
+                        renames.append((src, dst))
     return renames
 
 
@@ -156,6 +162,16 @@ def run_namna(files: list[Path], *, dry_run: bool, include_named: bool = False) 
         if resolved in dates:
             timestamp, subsecond = dates[resolved]
             entries.append((timestamp, subsecond, resolved))
+    # A sidecar matched by the glob is already carried by its main image in
+    # execute_renames; leaving it as a standalone entry would rename it twice.
+    claimed: set[Path] = set()
+    attached: set[Path] = set()
+    for _timestamp, _subsecond, path in entries:
+        if path.suffix.lower() in EXIF_SUFFIXES:
+            for sidecar in claim_sidecars(path, claimed):
+                attached.add(sidecar.resolve())
+    entries = [entry for entry in entries if entry[2].resolve() not in attached]
+
     renames = compute_renames(entries, include_named=include_named)
     print(f"Planned renames: {len(renames)}, without EXIF date: {len(files) - len(entries)}.")
     moved, failed = execute_renames(renames, dry_run=dry_run)

@@ -29,6 +29,37 @@ def test_compute_renames_protected_file_reserves_bare_slot():
     assert renames[0][1].name == "260101_120000-00.NEF"
 
 
+def test_compute_renames_same_second_same_extension_gets_distinct_slots():
+    first = Path("/tmp/DSC_0001.jpg")
+    second = Path("/tmp/DSC_0002.jpg")
+    renames = namna.compute_renames(
+        [("260101_120000", "0", first), ("260101_120000", "0", second)]
+    )
+    assert [dst.name for _src, dst in renames] == [
+        "260101_120000-00.jpg",
+        "260101_120000-01.jpg",
+    ]
+
+
+def test_cli_namna_does_not_rename_attached_sidecar_twice(tmp_path, monkeypatch):
+    raw = tmp_path / "DSC_0001.NEF"
+    sidecar = tmp_path / "DSC_0001.xmp"
+    raw.write_bytes(b"raw")
+    sidecar.write_text("xmp")
+    monkeypatch.setattr(
+        namna,
+        "exif_dates",
+        lambda files: {
+            raw.resolve(): ("260101_120000", "00"),
+            sidecar.resolve(): ("260101_120000", "00"),
+        },
+    )
+
+    assert main(["namna", str(raw), str(sidecar)]) == 0
+    assert (tmp_path / "260101_120000.NEF").exists()
+    assert (tmp_path / "260101_120000.xmp").read_text() == "xmp"
+
+
 def test_compute_renames_raw_and_jpeg_share_one_stem():
     raw = Path("/tmp/DSC_0001.NEF")
     jpg = Path("/tmp/DSC_0001.jpg")
