@@ -79,7 +79,9 @@ def cmd_flytta(args: argparse.Namespace) -> int:
         if mode is None:
             raise SystemExit("ambiguous input: choose --datum or --spegla")
         if mode == "namna":
-            raise SystemExit("rename needs the namna verb (phase 2b)")
+            # Never act on a question: the user asked to be asked, not to have
+            # their raw files renamed behind their back.
+            raise SystemExit(explanation)
 
     if mode == "spegla":
         if not source_root.is_dir():
@@ -121,6 +123,25 @@ def cmd_flytta(args: argparse.Namespace) -> int:
     if not args.dry_run:
         print(f"Moved {moved} images.")
     return 1 if failed else 0
+
+
+def cmd_namna(args: argparse.Namespace) -> int:
+    from glob import glob
+
+    from .namna import run_namna
+
+    files: list[Path] = []
+    for pattern in args.files:
+        candidate = Path(pattern)
+        matches = (
+            [candidate]
+            if candidate.is_file()
+            else [Path(match) for match in sorted(glob(pattern)) if Path(match).is_file()]
+        )
+        files.extend(matches)
+    return run_namna(
+        sorted(set(files)), dry_run=args.dry_run, include_named=args.include_named
+    )
 
 
 def cmd_contact(args: argparse.Namespace) -> int:
@@ -274,6 +295,20 @@ def build_parser() -> argparse.ArgumentParser:
     dates.add_argument("--fore", "--before", dest="before", metavar="DATUM")
     dates.add_argument("--efter", "--after", dest="after", metavar="DATUM")
     f.set_defaults(func=cmd_flytta)
+
+    n = sub.add_parser(
+        "namna",
+        help="rename files from EXIF CreateDate to YYMMDD_HHMMSS",
+        description="Rename images from their EXIF CreateDate. Files already carrying "
+        "their timestamp keep their name and reserve the slot, so a same-second "
+        "frame gets a -N suffix. XMP sidecars follow. Requires exiftool.",
+    )
+    n.add_argument("files", nargs="*", default=["*.NEF"], metavar="FIL")
+    n.add_argument("-n", "--dry-run", action="store_true", help="show what would be done")
+    n.add_argument(
+        "--include-named", action="store_true", help="also rename files that already carry a date"
+    )
+    n.set_defaults(func=cmd_namna)
     return p
 
 

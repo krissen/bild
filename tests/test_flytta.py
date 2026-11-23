@@ -89,10 +89,12 @@ def test_flytta_autodetects_datum(tmp_path, capsys):
 def test_flytta_asks_for_namna_on_dsc_raws(tmp_path, capsys):
     root = tmp_path / "raws"
     root.mkdir()
-    (root / "DSC_0001.NEF").write_bytes(b"raw")
+    src = root / "DSC_0001.NEF"
+    src.write_bytes(b"raw")
     with pytest.raises(SystemExit, match="namna"):
         main(["flytta", str(root)])
     assert "DSC_-raws" in capsys.readouterr().out
+    assert src.exists()
 
 
 def test_flytta_refuses_ambiguous_input(tmp_path):
