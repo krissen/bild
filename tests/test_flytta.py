@@ -68,10 +68,39 @@ def test_flytta_rejects_overlapping_roots(tmp_path):
         main(["flytta", "--spegla", "--kallrot", str(source), str(source)])
 
 
-def test_flytta_requires_a_mode(tmp_path):
-    _source, target, _photo = make_tree(tmp_path)
-    with pytest.raises(SystemExit, match="no mode given"):
-        main(["flytta", str(target)])
+def test_flytta_autodetects_spegla(tmp_path, capsys):
+    source, target, photo = make_tree(tmp_path)
+    assert main(["flytta", "-n", "--kallrot", str(source), str(target)]) == 0
+    out = capsys.readouterr().out
+    assert "Auto:" in out and "matchande källor" in out
+    assert "(dry)" in out
+    assert photo.exists()
+
+
+def test_flytta_autodetects_datum(tmp_path, capsys):
+    root = make_datum_tree(tmp_path)
+    assert main(["flytta", "-n", str(root)]) == 0
+    out = capsys.readouterr().out
+    assert "Auto:" in out and "datummärkta raw-" in out
+    assert "(dry)" in out
+    assert (root / "260101_090000.NEF").exists()
+
+
+def test_flytta_asks_for_namna_on_dsc_raws(tmp_path, capsys):
+    root = tmp_path / "raws"
+    root.mkdir()
+    (root / "DSC_0001.NEF").write_bytes(b"raw")
+    with pytest.raises(SystemExit, match="namna"):
+        main(["flytta", str(root)])
+    assert "DSC_-raws" in capsys.readouterr().out
+
+
+def test_flytta_refuses_ambiguous_input(tmp_path):
+    root = make_datum_tree(tmp_path)
+    (root / "261030_090000.jpg").write_bytes(b"jpg")
+    with pytest.raises(SystemExit, match="ambiguous input"):
+        main(["flytta", str(root)])
+    assert (root / "260101_090000.NEF").exists()
 
 
 def make_datum_tree(tmp_path):
@@ -80,7 +109,6 @@ def make_datum_tree(tmp_path):
     for name in ("260101_090000.NEF", "260101_100000.NEF", "260102_090000.NEF"):
         (root / name).write_bytes(b"raw")
     (root / "260101_090000.xmp").write_text("xmp")
-    (root / "DSC_0001.NEF").write_bytes(b"raw")
     return root
 
 
@@ -98,6 +126,7 @@ def test_compute_datum_moves_groups_and_filters(tmp_path):
 
 def test_flytta_datum_moves_into_date_folders(tmp_path):
     root = make_datum_tree(tmp_path)
+    (root / "DSC_0001.NEF").write_bytes(b"raw")
     assert main(["flytta", "--datum", str(root)]) == 0
     assert (root / "260101" / "260101_090000.NEF").exists()
     assert (root / "260101" / "260101_090000.xmp").exists()

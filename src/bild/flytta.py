@@ -11,6 +11,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from .moves import (
+    JPEG_EXTENSIONS,
+    RAW_EXTENSIONS,
     extract_date,
     extract_timestamp,
     find_sidecar_files,
@@ -59,6 +61,59 @@ def compute_spegla_moves(
             continue
         safe.append((path, target_root / folder / path.name))
     return safe, unresolved
+
+
+def detect_mode(target_root: Path, source_root: Path) -> tuple[str | None, str]:
+    """Guess the intended mode from the files in the target root.
+
+    Returns (mode, explanation). ``mode`` is None when the input is ambiguous —
+    detection never touches the filesystem, it only reports.
+    """
+    entries = [path for path in target_root.iterdir() if path.is_file()]
+    unnamed_raw = [
+        path
+        for path in entries
+        if path.name.startswith("DSC_") and path.suffix.lower() in RAW_EXTENSIONS
+    ]
+    # XMP files are sidecars: their fate follows the main file, so they must not
+    # create a second category next to a dated jpeg in the same directory.
+    dated_raw = [
+        path
+        for path in entries
+        if extract_date(path.name) and path.suffix.lower() in RAW_EXTENSIONS
+    ]
+    dated_jpg = [
+        path
+        for path in entries
+        if extract_date(path.name) and path.suffix.lower() in JPEG_EXTENSIONS
+    ]
+    categories = {
+        "unnamed_raw": unnamed_raw,
+        "dated_raw": dated_raw,
+        "dated_jpg": dated_jpg,
+    }
+    present = [name for name, paths in categories.items() if paths]
+    if len(present) != 1:
+        detail = ", ".join(f"{len(categories[name])} {name}" for name in present) or "inga kända filer"
+        return None, f"blandad eller okänd indata: {detail}"
+
+    if present == ["unnamed_raw"]:
+        return "namna", (
+            f"{len(unnamed_raw)} DSC_-raws utan datum i namnet — menade du 'bild namna'?"
+        )
+    if present == ["dated_raw"]:
+        return "datum", f"{len(dated_raw)} datummärkta raw-/xmp-filer i {target_root.name}/"
+
+    matched = 0
+    if source_root.is_dir():
+        index = build_source_index(source_root)
+        for path in dated_jpg:
+            parsed = extract_timestamp(path.name)
+            if parsed and parsed[0] in index:
+                matched += 1
+    return "spegla", (
+        f"{len(dated_jpg)} datummärkta jpegs, {matched} matchande källor under {source_root}"
+    )
 
 
 def compute_datum_moves(

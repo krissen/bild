@@ -61,22 +61,27 @@ def cmd_flytta(args: argparse.Namespace) -> int:
     from .flytta import (
         compute_datum_moves,
         compute_spegla_moves,
+        detect_mode,
         execute_datum_moves,
         execute_spegla_moves,
     )
     from .moves import parse_date_arg
 
     mode = "spegla" if args.spegla else "datum" if args.datum else None
-    if mode is None:
-        raise SystemExit(
-            "no mode given: use --spegla or --datum (auto-detect arrives in phase 2)"
-        )
     target_root = args.target.expanduser().resolve()
     if not target_root.is_dir():
         raise SystemExit(f"target root does not exist or is not a directory: {target_root}")
+    source_root = args.kallrot.expanduser().resolve()
+
+    if mode is None:
+        mode, explanation = detect_mode(target_root, source_root)
+        print(f"Auto: {explanation}")
+        if mode is None:
+            raise SystemExit("ambiguous input: choose --datum or --spegla")
+        if mode == "namna":
+            raise SystemExit("rename needs the namna verb (phase 2b)")
 
     if mode == "spegla":
-        source_root = args.kallrot.expanduser().resolve()
         if not source_root.is_dir():
             raise SystemExit(f"source root does not exist or is not a directory: {source_root}")
         if (
@@ -247,8 +252,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="move images into date folders or mirror the source folder structure",
         description="Move images. --datum groups files into YYMMDD folders; --spegla "
         "mirrors the relative folders of the source images (default source root: "
-        "~/Pictures/nerladdat). A mode is required for now; auto-detection arrives "
-        "in phase 2; see docs/PLAN.md.",
+        "~/Pictures/nerladdat). With no mode, the files in MÅLMAPP decide: DSC_ raws "
+        "ask for 'bild namna', dated raws mean --datum, dated jpegs mean --spegla. "
+        "See docs/PLAN.md.",
     )
     f.add_argument("target", nargs="?", type=Path, default=Path("."), metavar="MÅLMAPP")
     f.add_argument("-n", "--dry-run", action="store_true", help="show what would be done")
