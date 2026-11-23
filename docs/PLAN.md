@@ -1,6 +1,6 @@
 # Consolidation plan
 
-Status: agreed 2026-11-23; phases 0–2 implemented the same day. Scope: make `bild` the single entry point for image
+Status: agreed 2026-11-23; phases 0–5 implemented the same day. Scope: make `bild` the single entry point for image
 work, migrating the loose scripts one verb at a time. This document is the
 authoritative record of the decisions; update it when a decision changes, and
 record the change in the decision log at the bottom.
@@ -138,15 +138,15 @@ removal in phases 1–4.
 - **2026-11-23 — no guessing heuristic in phase 1.** Exact matching only.
 - **2026-11-23 — shims stay, marked deprecated.**
 
-## Known issue for phase 3 (`gor_mindre`)
+## Magick warning in `gor_mindre` (fixed)
 
-`gor_mindre` (in `~/Documents/scripts`) prints
+`gor_mindre` (in `~/Documents/scripts`) used to print
 `magick: ParseError missing > @ warning/xml-tree.c/NewXMLTree/1808.` for every
 scaled image. Investigated 2026-11-23: ImageMagick 7.1.2's XML scanner misreads
-Lightroom's valid `stEvt:changed="/"` attribute. The output metadata is intact
-(XMP byte-identical, EXIF preserved), so the warning is cosmetic. The fix is a
-separate one-line change in that repository: add `-quiet` to the `magick`
-command at lines 162–163. Do not fold it into a `bild` commit.
+Lightroom's valid `stEvt:changed="/"` attribute. Output metadata was intact
+(XMP byte-identical, EXIF preserved), so the warning was cosmetic. Fixed in the
+`scripts` repo with a separate commit (`0ad1997`): `-quiet` on the `magick`
+command. `gor_mindre` stays the engine behind `bild mindre`.
 
 ## Open questions
 
