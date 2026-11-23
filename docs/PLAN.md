@@ -145,7 +145,7 @@ removal in phases 1–4.
 scaled image. Investigated 2026-11-23: ImageMagick 7.1.2's XML scanner misreads
 Lightroom's valid `stEvt:changed="/"` attribute. Output metadata was intact
 (XMP byte-identical, EXIF preserved), so the warning was cosmetic. Fixed in the
-`scripts` repo with a separate commit (`0ad1997`): `-quiet` on the `magick`
+`scripts` repo with a separate commit (`5e66c1c` on the PR branch): `-quiet` on the `magick`
 command. `gor_mindre` stays the engine behind `bild mindre`.
 
 ## Open questions
