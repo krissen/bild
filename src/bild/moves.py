@@ -143,15 +143,23 @@ def _safe_rename(src: Path, dst: Path) -> None:
         src.rename(dst)
 
 
-def preflight_destinations(destinations: list[Path]) -> str | None:
-    """Return a non-mutating error for a planned move unit, or None."""
+def preflight_destinations(
+    destinations: list[Path], vacated: set[Path] | None = None
+) -> str | None:
+    """Return a non-mutating error for a planned move unit, or None.
+
+    ``vacated`` holds sources that earlier ordered moves will free, so a
+    destination occupied by one of them is not a conflict.
+    """
+    vacated = vacated or set()
     seen: set[str] = set()
     for destination in destinations:
         key = str(destination).casefold()
         if key in seen:
             return f"destination collision within the operation: {destination.name}"
         seen.add(key)
-        if destination.exists() or destination.is_symlink():
+        if (destination.exists() or destination.is_symlink()) \
+                and destination.resolve() not in vacated:
             return f"destination already exists: {destination}"
         parent = destination.parent
         while (

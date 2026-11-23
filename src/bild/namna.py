@@ -157,9 +157,15 @@ def build_move_plan(
 def execute_renames(plan: list[Move], *, dry_run: bool) -> tuple[int, int]:
     """Rename with the sidecars frozen in the plan. Returns (renamed, failed)."""
     moved = failed = 0
+    vacated: set[Path] = set()
+    for source, _target, sidecars in plan:
+        vacated.add(source.resolve())
+        vacated.update(sc_src.resolve() for sc_src, _dst in sidecars)
     for src, dst, sidecar_pairs in plan:
         if dry_run:
-            error = preflight_destinations([dst, *(d for _s, d in sidecar_pairs)])
+            error = preflight_destinations(
+                [dst, *(d for _s, d in sidecar_pairs)], vacated=vacated
+            )
             if error:
                 failed += 1
                 print(f"SKIP: {src.name}: {error}")
