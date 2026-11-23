@@ -30,6 +30,23 @@ def test_tider_dry_run_changes_nothing(tmp_path, monkeypatch, capsys):
     assert photo.exists()
 
 
+def test_cli_tider_accepts_negative_offset(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    photo = tmp_path / "250419_100000.jpg"
+    photo.write_bytes(b"x")
+    assert main(["tider", "-n", "-t", "-01:01:00", "-f", "*.jpg"]) == 0
+    assert "Offset -01:01:00" in capsys.readouterr().out
+    assert photo.exists()
+
+
+def test_cli_tider_accepts_long_negative_offset(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    photo = tmp_path / "250419_100000.jpg"
+    photo.write_bytes(b"x")
+    assert main(["tider", "-n", "--offset", "-01:01:00", "-f", "*.jpg"]) == 0
+    assert "Offset -01:01:00" in capsys.readouterr().out
+
+
 def test_tider_rename_chain_resolves_dependencies(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     first = tmp_path / "250419_100000.jpg"

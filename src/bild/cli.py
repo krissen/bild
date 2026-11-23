@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -458,7 +459,29 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _normalise_tider_offsets(argv: list[str]) -> list[str]:
+    """Make `-t -01:01:00` work: argparse reads a leading '-' as an option."""
+    normalised: list[str] = []
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if (
+            token in ("-t", "--offset")
+            and index + 1 < len(argv)
+            and re.fullmatch(r"-\d{2}:\d{2}:\d{2}", argv[index + 1])
+        ):
+            normalised.append(f"{token}={argv[index + 1]}")
+            index += 2
+            continue
+        normalised.append(token)
+        index += 1
+    return normalised
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["tider"]:
+        argv = _normalise_tider_offsets(argv)
     args = build_parser().parse_args(argv)
     return args.func(args)
 
