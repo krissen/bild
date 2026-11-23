@@ -69,6 +69,25 @@ def test_compute_renames_raw_and_jpeg_share_one_stem():
     assert [dst.name for _src, dst in renames] == ["260101_120000.NEF", "260101_120000.jpg"]
 
 
+def test_plan_freezes_sidecar_associations(tmp_path):
+    raw = tmp_path / "DSC_0001.NEF"
+    sidecar = tmp_path / "DSC_0001.xmp"
+    jpg = tmp_path / "260101_120000.jpg"
+    raw.write_bytes(b"raw")
+    sidecar.write_text("xmp")
+    jpg.write_bytes(b"jpg")
+    entries = [
+        ("260101_120000", "00", raw),
+        ("260101_120000", "00", sidecar),
+        ("260101_120100", "00", jpg),
+    ]
+
+    plan = namna.build_move_plan(entries)
+    assert namna.execute_renames(plan, dry_run=False) == (2, 0)
+    assert (tmp_path / "260101_120000.xmp").read_text() == "xmp"
+    assert not (tmp_path / "260101_120100.xmp").exists()
+
+
 def test_execute_renames_moves_shared_sidecar_once(tmp_path):
     raw = tmp_path / "DSC_0001.NEF"
     jpg = tmp_path / "DSC_0001.jpg"
@@ -76,11 +95,11 @@ def test_execute_renames_moves_shared_sidecar_once(tmp_path):
     for path in (raw, jpg):
         path.write_bytes(b"x")
     sidecar.write_text("xmp")
-    renames = namna.compute_renames(
+    plan = namna.build_move_plan(
         [("260101_120000", "00", raw), ("260101_120000", "00", jpg)]
     )
 
-    assert namna.execute_renames(renames, dry_run=False) == (2, 0)
+    assert namna.execute_renames(plan, dry_run=False) == (2, 0)
     assert (tmp_path / "260101_120000.xmp").read_text() == "xmp"
     assert not sidecar.exists()
 
@@ -92,7 +111,8 @@ def test_execute_renames_moves_sidecar(tmp_path):
     sidecar.write_text("xmp")
     dst = tmp_path / "260101_120000.NEF"
 
-    assert namna.execute_renames([(src, dst)], dry_run=False) == (1, 0)
+    plan = namna.build_move_plan([("260101_120000", "00", src)])
+    assert namna.execute_renames(plan, dry_run=False) == (1, 0)
     assert dst.read_bytes() == b"raw"
     assert dst.with_suffix(".xmp").read_text() == "xmp"
     assert not src.exists()
@@ -101,7 +121,8 @@ def test_execute_renames_moves_sidecar(tmp_path):
 def test_namna_dry_run_does_not_rename(tmp_path, capsys):
     src = tmp_path / "DSC_0001.NEF"
     src.write_bytes(b"raw")
-    namna.execute_renames([(src, tmp_path / "260101_120000.NEF")], dry_run=True)
+    plan = namna.build_move_plan([("260101_120000", "00", src)])
+    namna.execute_renames(plan, dry_run=True)
     assert "(dry)" in capsys.readouterr().out
     assert src.exists()
 

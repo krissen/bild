@@ -114,13 +114,45 @@ def compute_renames(
     return renames
 
 
-def execute_renames(renames: list[tuple[Path, Path]], *, dry_run: bool) -> tuple[int, int]:
-    """Rename with sidecars, never overwriting. Returns (renamed, failed)."""
-    moved = failed = 0
+# (main source, main target, sidecar pairs discovered before any rename)
+Move = tuple[Path, Path, list[tuple[Path, Path]]]
+
+
+def build_move_plan(
+    entries: list[tuple[str, str, Path]], *, include_named: bool = False
+) -> list[Move]:
+    """Freeze every sidecar association before the first filesystem change.
+
+    Discovering sidecars inside the execution loop can pick up an XMP that an
+    earlier rename just created at a later source's stem, transferring the
+    wrong photo's editing metadata. Discovery therefore happens once, up front.
+    """
     claimed: set[Path] = set()
-    for src, dst in renames:
-        sidecars = claim_sidecars(src, claimed)
-        sidecar_pairs = [(sc, dst.with_suffix(sc.suffix)) for sc in sidecars]
+    sidecars_by_main: dict[Path, list[Path]] = {}
+    attached: set[Path] = set()
+    for _timestamp, _subsecond, path in entries:
+        if path.suffix.lower() in EXIF_SUFFIXES:
+            sidecars = claim_sidecars(path, claimed)
+            sidecars_by_main[path.resolve()] = sidecars
+            attached.update(sidecar.resolve() for sidecar in sidecars)
+
+    # An XMP carried by its main must not also appear as a standalone rename.
+    planned = [entry for entry in entries if entry[2].resolve() not in attached]
+    renames = compute_renames(planned, include_named=include_named)
+    return [
+        (
+            src,
+            dst,
+            [(sc, dst.with_suffix(sc.suffix)) for sc in sidecars_by_main.get(src.resolve(), [])],
+        )
+        for src, dst in renames
+    ]
+
+
+def execute_renames(plan: list[Move], *, dry_run: bool) -> tuple[int, int]:
+    """Rename with the sidecars frozen in the plan. Returns (renamed, failed)."""
+    moved = failed = 0
+    for src, dst, sidecar_pairs in plan:
         if dry_run:
             error = preflight_destinations([dst, *(d for _s, d in sidecar_pairs)])
             if error:
@@ -162,19 +194,9 @@ def run_namna(files: list[Path], *, dry_run: bool, include_named: bool = False) 
         if resolved in dates:
             timestamp, subsecond = dates[resolved]
             entries.append((timestamp, subsecond, resolved))
-    # A sidecar matched by the glob is already carried by its main image in
-    # execute_renames; leaving it as a standalone entry would rename it twice.
-    claimed: set[Path] = set()
-    attached: set[Path] = set()
-    for _timestamp, _subsecond, path in entries:
-        if path.suffix.lower() in EXIF_SUFFIXES:
-            for sidecar in claim_sidecars(path, claimed):
-                attached.add(sidecar.resolve())
-    entries = [entry for entry in entries if entry[2].resolve() not in attached]
-
-    renames = compute_renames(entries, include_named=include_named)
-    print(f"Planned renames: {len(renames)}, without EXIF date: {len(files) - len(entries)}.")
-    moved, failed = execute_renames(renames, dry_run=dry_run)
+    plan = build_move_plan(entries, include_named=include_named)
+    print(f"Planned renames: {len(plan)}, without EXIF date: {len(files) - len(entries)}.")
+    moved, failed = execute_renames(plan, dry_run=dry_run)
     if not dry_run:
         print(f"Renamed {moved} files.")
     return 1 if failed else 0
