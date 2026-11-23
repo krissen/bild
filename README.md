@@ -3,6 +3,10 @@
 One command with verbs for image tasks. `bild --help` lists the verbs, `bild <verb> --help`
 the options.
 
+Loose image scripts are being consolidated into these verbs one at a time; see
+[docs/PLAN.md](docs/PLAN.md) for the migration plan, the verb registry and the
+mapping from old script names.
+
 | Verb | Does |
 |---|---|
 | `blur` | Detects faces (InsightFace buffalo_l) and blurs them with soft, feathered ellipses. Extra regions with `--add`, faces to leave with `--keep`, review image with `--preview`. |
