@@ -76,6 +76,17 @@ def test_tider_external_blocker_aborts_before_exif(tmp_path, monkeypatch):
     assert source.exists()
 
 
+def test_tider_rejects_dangling_destination_symlink_before_exif(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "260101_120000.jpg"
+    source.write_bytes(b"x")
+    (tmp_path / "260101_120100.jpg").symlink_to(tmp_path / "missing-target")
+    monkeypatch.setattr(tider, "find_exiftool", lambda: pytest.fail("exiftool called"))
+
+    assert main(["tider", "-t", "+00:01:00", "-f", "*.jpg"]) == 2
+    assert source.exists()
+
+
 def test_tider_exif_failure_prevents_renames(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     source = tmp_path / "250419_100000.jpg"

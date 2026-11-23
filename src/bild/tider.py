@@ -62,7 +62,8 @@ def preflight_renames(renames: list[Rename]) -> str | None:
             if key in seen:
                 return f"målnamn krockar inom operationen: {destination.name}"
             seen.add(key)
-            if destination.exists() and destination.resolve() not in sources:
+            if (destination.exists() or destination.is_symlink()) \
+                    and destination.resolve() not in sources:
                 return f"målet finns redan: {destination}"
     return None
 
