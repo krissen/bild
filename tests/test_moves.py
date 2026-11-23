@@ -4,6 +4,7 @@ import pytest
 
 from bild.moves import (
     extract_timestamp,
+    find_sidecar_files,
     move_unit,
     preflight_destinations,
 )
@@ -14,6 +15,17 @@ def test_extract_timestamp():
     assert extract_timestamp("260101_120000.jpg")[0] == "260101_120000"
     assert extract_timestamp("DSC_1234.NEF") is None
     assert extract_timestamp("260199_999999.jpg") is None
+
+
+def test_find_sidecar_files_matches_stem_literally(tmp_path):
+    raw = tmp_path / "DSC_[1].NEF"
+    real = tmp_path / "DSC_[1].xmp"
+    decoy = tmp_path / "DSC_1.xmp"
+    raw.write_bytes(b"raw")
+    real.write_text("real")
+    decoy.write_text("decoy")
+
+    assert find_sidecar_files(raw) == [real]
 
 
 def test_move_unit_moves_main_and_sidecar(tmp_path):

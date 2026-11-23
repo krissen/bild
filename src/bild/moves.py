@@ -11,6 +11,7 @@ import os
 import re
 import uuid
 from datetime import datetime
+from glob import escape as glob_escape
 from pathlib import Path
 
 # Canonical extension sets, copied from ansikten's core/files.py (29 lines).
@@ -75,7 +76,8 @@ def iter_supported_images(root: Path, recursive: bool) -> list[Path]:
 
 def find_sidecar_files(file: Path) -> list[Path]:
     """Find the .xmp sidecar for a file, if any (one on a case-insensitive FS)."""
-    for sidecar in file.parent.glob(f"{file.stem}.[xX][mM][pP]"):
+    pattern = f"{glob_escape(file.stem)}.[xX][mM][pP]"
+    for sidecar in file.parent.glob(pattern):
         if sidecar.exists() and sidecar != file:
             return [sidecar]
     return []
